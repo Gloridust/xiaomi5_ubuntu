@@ -27,7 +27,7 @@ so the phone works on its own as a small server, for example to run **Claude Cod
 
 | Component | Driver | Status |
 |---|---|---|
-| CPU (4 cores), thermal | tsens | ✅ fixed at 1.04 GHz ² |
+| CPU (4 cores), frequency scaling, thermal | cpufreq-dt + kryo clocks, PM8994 S11 (SAW), tsens | ⚠️ 307 MHz – 2.15 GHz, needs testing on a Mi 5 ² |
 | Storage (UFS) | ufs-qcom (built in) | ✅ upstream |
 | Display 1080×1920 | msm DRM + `panel-jdi-fhd-r63452` | ✅ tested on a Mi 5 |
 | Backlight | qcom-wled | ✅ upstream |
@@ -46,19 +46,24 @@ so the phone works on its own as a small server, for example to run **Claude Cod
 | NFC | nxp-nci | ⚠️ driver only, untested |
 | Sensors: accel, gyro, compass, proximity, barometer | SLPI DSP, `qcom_sns_reg` + `qcom_smgr` IIO | ✅ tested on a Mi 5, needs device firmware ¹ (`gemini-sensors`) |
 | Clock (keeps time while off) | pm8xxx RTC + saved offset (`gemini-rtc-offset`) | ✅ tested on a Mi 5 |
-| Cameras, fingerprint, suspend-to-RAM | – | ❌ not supported (phone stays awake; screen turns off) |
+| Sleep (suspend to idle) | s2idle; wakes on power key, volume up, Home, charger | ⚠️ opt-in (`phone-sleep`), needs testing on a Mi 5 ⁵ |
+| Cameras, fingerprint, deep sleep (suspend to RAM) | – | ❌ not supported |
 
 ¹ The GPU zap shader and DSP/modem firmware are signed by Xiaomi and cannot
 be redistributed. **The phone copies them from its own Android partitions on
 first boot** (`gemini-firmware-install`), or you can bake them in at build
 time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 
-² The device tree has no CPU voltage scaling yet, and changing the CPU clock
-without it locks up the phone, so cpufreq is off (`cpufreq.off=1`) and the CPUs
-stay at the bootloader's 1.04 GHz.
+² Kernel patch 0005 gives the CPU clocks voltages (the downstream kernel's
+safe maximums, as mainline has no CPR driver for this chip). Changing the clock
+without them locked up the phone. Scaling starts after boot, with a guard: if
+the phone hangs or restarts within 10 minutes, the next boot uses a slower
+level (`cpu full` → `safe` → `off`). See [docs/HARDWARE.md](docs/HARDWARE.md#cpu-speed).
 ³ The USB PHY sometimes fails to start at boot; `gemini-usb-gadget` retries.
 ⁴ The PCIe link to the WiFi chip sometimes doesn't train at boot;
 `gemini-pcie-retrain` brings it back.
+⁵ Off by default (a server should stay reachable). If a sleep never wakes up,
+automatic sleep turns itself off. See [docs/HARDWARE.md](docs/HARDWARE.md#sleep).
 
 > **Status:** boots to a working Ubuntu 26.04 login on a real Mi 5 (display,
 > touch keyboard, USB network + SSH, storage, battery charging, WiFi,

@@ -2,7 +2,7 @@
 """Simulate the Mi 5 buttons and check gemini-powerkey's behaviour:
 short power press toggles the screen, volume/home are sent as up/down/Enter,
 a press on a dark screen only wakes it, touch is grabbed while dark."""
-import importlib.machinery, importlib.util, os, select, sys, types
+import importlib.machinery, importlib.util, os, select, signal, sys, types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(HERE, "..", "rootfs-overlay", "usr", "local", "sbin", "gemini-powerkey")
@@ -61,6 +61,7 @@ script = [
     (pwr, [Ev(1, ec.KEY_POWER, 1), Ev(1, ec.KEY_POWER, 0)]),          # screen off
     (gpio, [Ev(1, ec.KEY_HOME, 1), Ev(1, ec.KEY_HOME, 0)]),           # wake only
     (gpio, [Ev(1, ec.KEY_VOLUMEUP, 1), Ev(1, ec.KEY_VOLUMEUP, 0)]),   # -> UP
+    "SIGUSR1",                                                        # phone-sleep: off
 ]
 step = {"i": 0}
 grab_seen = []
@@ -70,8 +71,12 @@ def fake_select(r, w, x, t=None):
     grab_seen.append(touch.grabbed)
     if step["i"] >= len(script):
         raise SystemExit(0)
-    d, evs = script[step["i"]]
+    entry = script[step["i"]]
     step["i"] += 1
+    if entry == "SIGUSR1":
+        os.kill(os.getpid(), signal.SIGUSR1)
+        return [], [], []
+    d, evs = entry
     d.queue = evs
     return [d.fd], [], []
 
@@ -85,9 +90,11 @@ except SystemExit:
 U, D, E = ec.KEY_UP, ec.KEY_DOWN, ec.KEY_ENTER
 want = [(U, 1), (U, 0), (D, 1), (D, 0), (E, 1), (E, 0), (U, 1), (U, 0)]
 assert sent == want, "remapped keys: %r" % sent
-# on at start (from a known state), off with the power key, on again on wake
-assert states == [True, False, True], "screen states: %r" % states
+# on at start (from a known state), off with the power key, on again on
+# wake, off on SIGUSR1 (phone-sleep)
+assert states == [True, False, True, False], "screen states: %r" % states
 assert gpio.grabbed and resin.grabbed and not pwr.grabbed, "button devices must be grabbed"
 assert True in grab_seen, "touchscreen should be grabbed while the screen is off"
-assert not touch.grabbed, "touchscreen released after waking"
+assert grab_seen[-2] is False, "touchscreen released after waking"
+assert touch.grabbed, "touchscreen grabbed again after SIGUSR1"
 print("powerkey test passed")

@@ -11,7 +11,7 @@ log "Copying rootfs overlay"
 cp -a --no-preserve=ownership "${TOP_DIR}/rootfs-overlay/." "$R/"
 chown -R root:root "$R/usr/local" "$R/etc/systemd" "$R/etc/udev/rules.d" \
 	"$R/etc/NetworkManager/conf.d" "$R/etc/netplan" "$R/etc/initramfs-tools" \
-	"$R/usr/share/alsa/ucm2"
+	"$R/usr/share/alsa/ucm2" "$R/usr/lib/systemd/system-sleep/gemini"
 chown root:root "$R"/etc/sudoers.d/gemini && chmod 0440 "$R"/etc/sudoers.d/gemini
 
 log "Writing /etc/default/gemini"
@@ -44,6 +44,20 @@ USB_PC_CURRENT=500
 AUTO_HOTSPOT=yes
 HOTSPOT_SSID="Mi5-Ubuntu"
 HOTSPOT_AFTER=5
+
+# CPU speed (or run: cpu full|safe|off)
+#   full  up to 1.6 GHz (small cores) / 2.15 GHz (big cores)
+#   safe  up to 1.2 GHz at a lower voltage: cooler, longer battery
+#   off   no clock changes: the CPUs stay at the bootloader's 1 GHz
+# If the phone hangs or restarts on its own within 10 minutes of a boot, the
+# next boot uses one level lower until you choose again with "cpu".
+CPU_SPEED=full
+
+# Sleep after this many minutes with the screen off, on battery, with no ssh
+# login and none of SLEEP_BLOCKERS running (0 = never; or: phone-sleep auto N).
+# While asleep the phone is off the network; the power key wakes it.
+AUTO_SLEEP=0
+SLEEP_BLOCKERS="claude pi node apt apt-get dpkg unattended-upgr"
 EOF
 
 log "Hostname, hosts, fstab"
@@ -164,10 +178,12 @@ systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadge
 	systemd-networkd.service NetworkManager.service \
 	systemd-resolved.service bluetooth.service rmtfs.service \
 	ModemManager.service gemini-wifi-watchdog.timer \
-	gemini-rtc-offset.service gemini-rtc-offset-save.timer gemini-pcie-retrain.service
+	gemini-rtc-offset.service gemini-rtc-offset-save.timer gemini-pcie-retrain.service \
+	gemini-cpufreq.service gemini-sleep-check.service gemini-autosleep.timer
+# Suspend (to idle) is allowed; there is nothing to hibernate to.
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \
-	systemd-firstboot.service sleep.target suspend.target hibernate.target \
-	hybrid-sleep.target suspend-then-hibernate.target >/dev/null
+	systemd-firstboot.service hibernate.target hybrid-sleep.target \
+	suspend-then-hibernate.target >/dev/null
 case "${UI}" in
 console)
 	systemd_enable buffyboard.service gemini-powerkey.service

@@ -1,0 +1,198 @@
+#!/bin/bash
+# CPU frequency scaling with a crash guard (gemini-cpufreq.service).
+#
+#   gemini-cpufreq run      boot: load the cpufreq drivers, apply CPU_SPEED,
+#                           and mark it good after CONFIRM_AFTER seconds
+#   gemini-cpufreq stop     clean shutdown: the attempt didn't hang the phone
+#   gemini-cpufreq set full|safe|off   choose a level (and retry it)
+#   gemini-cpufreq status
+#
+# CPU_SPEED in /etc/default/gemini:
+#   full  every clock the chip is rated for: up to 1.59 GHz (small cores) and
+#         2.15 GHz (big cores); 1140 mV above 1.23 / 1.25 GHz
+#   safe  up to 1.23 GHz (small) / 1.25 GHz (big), all at 905 mV
+#   off   drivers not loaded: the CPUs keep the bootloader's clock
+#
+# The voltages come from the kernel's device tree (patch 0005). Without a
+# phone to test on, every level is guarded: before scaling is switched on the
+# level is saved as "trying"; it is cleared after CONFIRM_AFTER seconds or on a
+# clean shutdown. If a boot finds "trying" still set, the phone hung or
+# rebooted with that level, so it drops one level (full -> safe -> off) and
+# stays there until a level is chosen again with `cpu full|safe|off`.
+set -u
+SYS=${GEMINI_SYS:-/sys}
+CONF=${GEMINI_CONF:-/etc/default/gemini}
+STATE=${GEMINI_CPUFREQ_STATE:-/var/lib/gemini/cpufreq}
+CMDLINE=${GEMINI_CMDLINE:-/proc/cmdline}
+MODPROBE=${GEMINI_MODPROBE:-modprobe}
+CONFIRM_AFTER=${CONFIRM_AFTER:-600}
+POLICIES="$SYS/devices/system/cpu/cpufreq"
+
+# Highest clock of each cluster at 905 mV (the NOM corner), by the policy's
+# first CPU: 0 = small cores (Kryo "power" cluster), 2 = big cores.
+safe_khz() { case $1 in 0) echo 1228800 ;; 2) echo 1248000 ;; *) echo 0 ;; esac; }
+OFF_KHZ=1036800   # "off" while the drivers are loaded: about the bootloader's clock
+
+log() { echo "gemini-cpufreq: $*"; }
+rank() { case $1 in full) echo 2 ;; safe) echo 1 ;; *) echo 0 ;; esac; }
+lower() { case $1 in full) echo safe ;; *) echo off ;; esac; }
+valid() { case $1 in full|safe|off) return 0 ;; *) return 1 ;; esac; }
+
+conf_speed() {
+	local v
+	v=$(sed -n 's/^CPU_SPEED=["]*\([a-z]*\).*/\1/p' "$CONF" 2>/dev/null | tail -1)
+	valid "${v:-x}" && echo "$v" || echo full
+}
+
+trying=""; limit=full; failed=""
+load_state() {
+	local k v
+	[ -r "$STATE" ] || return 0
+	while IFS='=' read -r k v; do
+		case $k in
+		trying) valid "$v" && trying=$v ;;
+		limit)  valid "$v" && limit=$v ;;
+		failed) failed=$v ;;
+		esac
+	done < "$STATE"
+}
+save_state() {
+	mkdir -p "${STATE%/*}"
+	printf 'trying=%s\nlimit=%s\nfailed=%s\n' "$trying" "$limit" "$failed" > "$STATE.new" &&
+		mv "$STATE.new" "$STATE"
+	# must be on disk before the clock goes up, or a hang leaves no trace
+	sync "$STATE" 2>/dev/null || sync
+}
+
+policies() { ls -d "$POLICIES"/policy* 2>/dev/null; }
+
+apply() {   # apply LEVEL to every policy
+	local level=$1 p first max cap gov
+	for p in $(policies); do
+		first=${p##*policy}
+		max=$(cat "$p/cpuinfo_max_freq")
+		gov=schedutil
+		case $level in
+		full) cap=$max ;;
+		safe) cap=$(safe_khz "$first"); [ "$cap" -gt 0 ] && [ "$cap" -le "$max" ] || cap=$max ;;
+		*)    cap=$OFF_KHZ; [ "$cap" -le "$max" ] || cap=$max; gov=performance ;;
+		esac
+		echo "$cap" > "$p/scaling_max_freq"
+		echo "$gov" > "$p/scaling_governor" 2>/dev/null ||
+			log "governor $gov not available for ${p##*/}"
+	done
+}
+
+start() {
+	load_state
+	if [ -n "$trying" ]; then
+		local down
+		down=$(lower "$trying")
+		[ "$(rank "$down")" -lt "$(rank "$limit")" ] && limit=$down
+		failed="$trying $(date '+%F %T')"
+		log "the last boot with CPU speed '$trying' did not finish (hang or crash);" \
+			"using '$limit' now. To try again: cpu $trying"
+		trying=""
+		save_state
+	fi
+
+	local want eff
+	want=$(conf_speed)
+	eff=$want
+	[ "$(rank "$limit")" -lt "$(rank "$want")" ] && eff=$limit
+
+	if grep -qw 'cpufreq.off=1' "$CMDLINE" 2>/dev/null; then
+		log "cpufreq.off=1 is on the kernel command line: CPU scaling stays off" \
+			"(remove it from KERNEL_CMDLINE in $CONF, then: sudo gemini-mkbootimg --flash)"
+		return 1
+	fi
+	if [ "$eff" = off ]; then
+		if [ -n "$(policies)" ]; then
+			apply off
+			log "CPU speed off: held at $((OFF_KHZ / 1000)) MHz until the next boot"
+		else
+			log "CPU speed off: the CPUs keep the bootloader's clock"
+		fi
+		return 1
+	fi
+
+	trying=$eff
+	save_state
+	if [ -z "$(policies)" ]; then
+		"$MODPROBE" qcom-cpufreq-nvmem 2>/dev/null
+		"$MODPROBE" cpufreq-dt 2>/dev/null
+		for _ in $(seq 30); do
+			[ -n "$(policies)" ] && break
+			sleep 0.5
+		done
+	fi
+	if [ -z "$(policies)" ]; then
+		log "no CPU frequency driver for this machine"
+		trying=""
+		save_state
+		return 1
+	fi
+	apply "$eff"
+	log "CPU speed $eff$([ "$eff" != "$want" ] && echo " (you chose $want)")"
+	return 0
+}
+
+confirm() {
+	load_state
+	[ -n "$trying" ] || return 0
+	log "CPU speed '$trying' ran for $CONFIRM_AFTER s without trouble"
+	trying=""
+	save_state
+}
+
+case "${1:-status}" in
+run)
+	start || exit 0
+	sleep "$CONFIRM_AFTER"
+	confirm
+	;;
+confirm)
+	confirm
+	;;
+stop)
+	# a clean shutdown or restart: whatever was being tried didn't hang
+	load_state
+	if [ -n "$trying" ]; then trying=""; save_state; fi
+	;;
+set)
+	level=${2:-}
+	valid "$level" || { echo "usage: gemini-cpufreq set full|safe|off" >&2; exit 2; }
+	if grep -q '^CPU_SPEED=' "$CONF" 2>/dev/null; then
+		sed -i "s/^CPU_SPEED=.*/CPU_SPEED=$level/" "$CONF"
+	else
+		printf '\nCPU_SPEED=%s\n' "$level" >> "$CONF"
+	fi
+	# choosing a level by hand lifts the limit an earlier hang set
+	load_state
+	limit=full; trying=""
+	save_state
+	;;
+status)
+	load_state
+	want=$(conf_speed)
+	echo "CPU speed setting: $want"
+	[ "$(rank "$limit")" -lt "$(rank "$want")" ] &&
+		echo "Limited to:        $limit (the phone hung with '${failed%% *}' on ${failed#* })"
+	[ -n "$trying" ] && echo "Being tested:      $trying (not yet confirmed)"
+	if [ -z "$(policies)" ]; then
+		echo "CPU scaling:       off"
+	else
+		for p in $(policies); do
+			first=${p##*policy}
+			name="small cores"; [ "$first" = 0 ] || name="big cores  "
+			printf '%s %s:  %4d MHz  (max %d MHz, %s)\n' "$name" "$(cat "$p/related_cpus")" \
+				"$(( $(cat "$p/scaling_cur_freq") / 1000 ))" \
+				"$(( $(cat "$p/scaling_max_freq") / 1000 ))" "$(cat "$p/scaling_governor")"
+		done
+	fi
+	;;
+*)
+	echo "usage: gemini-cpufreq run|stop|set LEVEL|status" >&2
+	exit 2
+	;;
+esac

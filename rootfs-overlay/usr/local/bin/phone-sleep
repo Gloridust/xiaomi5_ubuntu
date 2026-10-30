@@ -1,0 +1,51 @@
+#!/bin/bash
+# Put the phone to sleep:
+#   phone-sleep           sleep now; press the power key to wake it up
+#   phone-sleep auto 10   sleep by itself after 10 minutes with the screen off
+#                         (not on a charger, not during ssh, not while
+#                         Claude Code / pi / apt run). 0 = never (default)
+#   phone-sleep auto      show the setting
+# While asleep the phone is off the network: ssh and Claude Code stop until
+# it wakes. Wakes on: power key, volume up, Home, plugging in a charger.
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+CONF=/etc/default/gemini
+case "${1:-}" in
+"")
+	if [ -s /var/lib/gemini/sleep-failed ]; then
+		echo "Note: the last sleep ($(cat /var/lib/gemini/sleep-failed)) never woke up."
+		rm -f /var/lib/gemini/sleep-failed
+	fi
+	echo "Going to sleep. Press the power key to wake up."
+	sleep 2
+	# screen off first, so the power key that wakes the phone turns it back on
+	if pid=$(pgrep -xo sway); then
+		sock=$(ls "/run/user/$(stat -c %u "/proc/$pid")"/sway-ipc.*.sock 2>/dev/null | head -1)
+		[ -n "$sock" ] && SWAYSOCK=$sock swaymsg exec '/usr/local/bin/gemini-sway-screen off' >/dev/null
+	else
+		pkill -USR1 -f /usr/local/sbin/gemini-powerkey
+	fi
+	sleep 2   # gemini-powerkey checks for the signal at least once a second
+	if /usr/local/sbin/gemini-sleep now; then
+		echo "Good morning."
+	else
+		echo "The phone could not sleep (see above)."
+		exit 1
+	fi
+	;;
+auto)
+	if [ -z "${2:-}" ]; then grep '^AUTO_SLEEP=' "$CONF" || echo "AUTO_SLEEP=0"; exit 0; fi
+	[[ "$2" =~ ^[0-9]+$ ]] || { echo "usage: phone-sleep auto MINUTES"; exit 1; }
+	if grep -q '^AUTO_SLEEP=' "$CONF"; then
+		sed -i "s/^AUTO_SLEEP=.*/AUTO_SLEEP=$2/" "$CONF"
+	else
+		echo "AUTO_SLEEP=$2" >> "$CONF"
+	fi
+	rm -f /var/lib/gemini/sleep-failed
+	if [ "$2" -eq 0 ]; then echo "Automatic sleep: off"
+	else echo "Automatic sleep: after $2 minutes with the screen off (on battery)"; fi
+	;;
+*)
+	sed -n '2,9s/^# \{0,1\}//p' "$0"
+	exit 1
+	;;
+esac

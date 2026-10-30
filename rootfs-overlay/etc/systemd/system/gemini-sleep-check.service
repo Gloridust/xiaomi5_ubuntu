@@ -1,0 +1,10 @@
+[Unit]
+Description=Turn automatic sleep off if the last sleep never woke up
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-sleep boot
+
+[Install]
+WantedBy=multi-user.target

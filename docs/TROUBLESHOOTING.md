@@ -79,6 +79,23 @@ The console screen is toggled by `gemini-powerkey`; check
 `systemctl status gemini-powerkey`. Use the volume keys to wake as well.
 Set `SCREEN_TIMEOUT=0` in `/etc/default/gemini` to keep the screen on.
 
+## The phone hangs or restarts by itself a few minutes after booting
+
+Most likely the CPU speed. Hold power for ~10 s to restart it: the next boot
+notices and uses one level slower (`full` → `safe` → `off`); `cpu` shows the
+level and why. If it still hangs, from TWRP's terminal (or after mounting the
+Ubuntu partition) set `CPU_SPEED=off` in `/etc/default/gemini`. Please report
+which level hung, with `journalctl -b -1 -u gemini-cpufreq` and
+`/sys/fs/pstore/*` if there is anything.
+
+## The phone doesn't wake up from sleep
+
+Press power, then volume up or Home. If nothing helps, hold power ~10 s to
+restart: automatic sleep is then switched off by itself. Find out what went
+wrong with `journalctl -b -1 | tail -50` and `dmesg | grep -i -E 'suspend|resume'`.
+If sleep fails at once ("could not sleep"), the kernel names the driver that
+refused: `cat /sys/power/suspend_stats/last_failed_dev`.
+
 ## Change the kernel command line
 
 Edit `KERNEL_CMDLINE` in `/etc/default/gemini`, then `sudo gemini-mkbootimg --flash`.

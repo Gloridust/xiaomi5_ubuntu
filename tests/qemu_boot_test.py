@@ -90,6 +90,20 @@ try:
     check("for c in whiptail tmux git rg jq nmcli; do command -v $c >/dev/null || echo missing $c; done; echo tools-checked",
           r"^tools-checked$")
     check("echo %s | sudo -S -p '' /usr/local/sbin/gemini-wifi-watchdog; echo rc=$?" % PW, r"rc=0")
+    # CPU speed: no cpufreq driver for the "virt" machine; the guard must not
+    # count that as a hang
+    check("systemctl is-enabled gemini-cpufreq gemini-sleep-check gemini-autosleep.timer | sort -u", r"^enabled$")
+    check("journalctl -b -u gemini-cpufreq --no-pager -o cat | grep gemini-cpufreq", r"no CPU frequency driver")
+    check("cpu", r"CPU speed setting: full\n(.*\n)?CPU scaling: +off")
+    check("grep -o 'cpufreq[^ ]*' /proc/cmdline /etc/default/gemini | sort -u", r"default_governor=powersave")
+    # Sleep: s2idle through systemd and the hooks, woken by an RTC alarm
+    check("cat /sys/power/mem_sleep; systemctl is-enabled suspend.target hibernate.target 2>&1 | tr '\\n' ' '",
+          r"s2idle[\s\S]*(static|enabled|disabled|indirect).* masked")
+    check("echo %s | sudo -S -p '' sh -c 'rtcwake -m no -s 60 >/dev/null && /usr/local/sbin/gemini-sleep now'; echo rc=$?" % PW,
+          r"rc=0", timeout=600)
+    check("cat /sys/power/suspend_stats/success; ls /var/lib/gemini/sleep-pending 2>&1 | grep -c 'No such'",
+          r"^[1-9]\d*\n1$")
+    check("journalctl -b --no-pager -o cat | grep 'gemini-sleep: awake' | tail -1", r"awake again")
     if os.environ.get("QEMU_NET_TESTS") == "1":
         # Claude Code from Anthropic's official installer, on this image
         check("install-claude 2>&1 | tail -4", r"Done\. Start Claude Code", timeout=1500)

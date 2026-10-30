@@ -1,0 +1,160 @@
+#!/bin/bash
+# Suspend (s2idle) for the Mi 5.
+#
+#   gemini-sleep now      sleep now; wakes on the power key, volume up, Home,
+#                         a charger plug-in or an RTC alarm
+#   gemini-sleep auto     run every minute by gemini-autosleep.timer: sleep
+#                         when the screen has been off for AUTO_SLEEP minutes
+#   gemini-sleep boot     at boot: if the last sleep never woke up, turn
+#                         AUTO_SLEEP off
+#   gemini-sleep pre|post called by systemd around every suspend
+#                         (/usr/lib/systemd/system-sleep/gemini)
+#
+# MSM8996 has no deep sleep in mainline, so this is "suspend to idle": user
+# programs and most drivers are stopped and the CPUs wait in their idle state.
+# While asleep the phone is not on the network.
+set -u
+SYS=${GEMINI_SYS:-/sys}
+CONF=${GEMINI_CONF:-/etc/default/gemini}
+DIR=${GEMINI_SLEEP_STATE:-/var/lib/gemini}
+RUN=${GEMINI_RUN:-/run/gemini-sleep}
+SYSTEMCTL=${GEMINI_SYSTEMCTL:-systemctl}
+PENDING="$DIR/sleep-pending"    # written before sleeping, removed after waking
+FAILED="$DIR/sleep-failed"      # the last sleep never woke up
+log() { echo "gemini-sleep: $*"; }
+
+conf() {   # conf NAME DEFAULT
+	local v
+	v=$(sed -n "s/^$1=[\"]*\\([^\"]*\\).*/\\1/p" "$CONF" 2>/dev/null | tail -1)
+	echo "${v:-$2}"
+}
+set_conf() {   # set_conf NAME VALUE
+	if grep -q "^$1=" "$CONF" 2>/dev/null; then
+		sed -i "s/^$1=.*/$1=$2/" "$CONF"
+	else
+		printf '%s=%s\n' "$1" "$2" >> "$CONF"
+	fi
+}
+
+screen_off() {   # every backlight dark
+	local b found=0
+	for b in "$SYS"/class/backlight/*; do
+		[ -e "$b/brightness" ] || continue
+		found=1
+		[ "$(cat "$b/brightness")" -eq 0 ] && continue
+		[ "$(cat "$b/bl_power" 2>/dev/null || echo 0)" -ne 0 ] && continue
+		return 1
+	done
+	[ $found -eq 1 ]
+}
+
+on_power() {   # charger or PC cable connected
+	local s
+	for s in "$SYS"/class/power_supply/*; do
+		case "$(cat "$s/type" 2>/dev/null)" in
+		Mains|USB*) [ "$(cat "$s/online" 2>/dev/null)" = 1 ] && return 0 ;;
+		esac
+	done
+	return 1
+}
+
+blocked() {   # prints why the phone should stay awake
+	on_power && { echo "on a charger"; return 0; }
+	if command -v ss >/dev/null &&
+	   [ -n "$(ss -Htn state established '( sport = :22 )' 2>/dev/null)" ]; then
+		echo "someone is logged in over ssh"; return 0
+	fi
+	local p
+	for p in $(conf SLEEP_BLOCKERS "claude pi node apt apt-get dpkg unattended-upgr"); do
+		pgrep -x "$p" >/dev/null 2>&1 && { echo "$p is running"; return 0; }
+	done
+	return 1
+}
+
+pmstat() { cat "$SYS/power/suspend_stats/$1" 2>/dev/null || echo 0; }
+attempts() { echo $(( $(pmstat success) + $(pmstat fail) )); }
+
+suspend_now() {
+	local before fails
+	before=$(attempts)
+	fails=$(pmstat fail)
+	if ! "$SYSTEMCTL" suspend --check-inhibitors=yes; then
+		log "systemd refused to sleep (a program holds a sleep inhibitor: systemd-inhibit --list)"
+		return 1
+	fi
+	# systemctl only queues the suspend; the counters change once it's over
+	for _ in $(seq 60); do
+		[ "$(attempts)" -gt "$before" ] && break
+		sleep 1
+	done
+	if [ "$(attempts)" -le "$before" ]; then
+		log "the phone did not go to sleep (journalctl -b -u systemd-suspend)"
+		return 1
+	fi
+	if [ "$(pmstat fail)" -gt "$fails" ]; then
+		log "the kernel could not sleep: $(pmstat last_failed_dev) $(pmstat last_failed_errno)" \
+			"(dmesg | grep -i suspend)"
+		return 1
+	fi
+	return 0
+}
+
+case "${1:-}" in
+now)
+	suspend_now
+	exit $?
+	;;
+auto)
+	mins=$(conf AUTO_SLEEP 0)
+	[[ "$mins" =~ ^[0-9]+$ ]] && [ "$mins" -gt 0 ] || exit 0
+	mkdir -p "$RUN"
+	now=$(date +%s)
+	if ! screen_off; then rm -f "$RUN/off-since"; exit 0; fi
+	[ -s "$RUN/off-since" ] || echo "$now" > "$RUN/off-since"
+	[ $(( now - $(cat "$RUN/off-since") )) -ge $(( mins * 60 )) ] || exit 0
+	# after a failed attempt, wait 30 minutes before the next
+	if [ -s "$RUN/retry-after" ] && [ "$now" -lt "$(cat "$RUN/retry-after")" ]; then exit 0; fi
+	if why=$(blocked); then
+		[ "$(cat "$RUN/last-block" 2>/dev/null)" = "$why" ] || log "staying awake: $why"
+		echo "$why" > "$RUN/last-block"
+		exit 0
+	fi
+	rm -f "$RUN/last-block"
+	log "screen off for $mins min, going to sleep"
+	if ! suspend_now; then
+		echo $(( now + 1800 )) > "$RUN/retry-after"
+	fi
+	;;
+boot)
+	if [ -e "$PENDING" ]; then
+		when=$(cat "$PENDING")
+		rm -f "$PENDING"
+		echo "$when" > "$FAILED"
+		if [ "$(conf AUTO_SLEEP 0)" != 0 ]; then
+			set_conf AUTO_SLEEP 0
+			log "the phone went to sleep at $when and never woke up (or the battery ran out);" \
+				"automatic sleep is now off. Turn it on again with: phone-sleep auto MINUTES"
+		else
+			log "the phone went to sleep at $when and never woke up (or the battery ran out)"
+		fi
+	fi
+	;;
+pre)
+	mkdir -p "$DIR"
+	date '+%F %T' > "$PENDING"
+	sync
+	;;
+post)
+	rm -f "$PENDING" "$RUN/off-since"
+	sync
+	irq=$(cat "$SYS/power/pm_wakeup_irq" 2>/dev/null)
+	log "awake again${irq:+ (wakeup interrupt $irq)}"
+	# reconnect WiFi right away instead of at the next 2-minute check
+	"$SYSTEMCTL" --no-block start gemini-wifi-watchdog.service 2>/dev/null
+	;;
+*)
+	echo "usage: gemini-sleep now|auto|boot|pre|post" >&2
+	exit 2
+	;;
+esac
+exit 0

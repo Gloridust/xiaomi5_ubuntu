@@ -1,0 +1,27 @@
+#!/bin/bash
+# CPU speed:
+#   cpu          show the setting, the clocks and the temperature
+#   cpu full     fastest: up to 1.6 GHz (small cores) / 2.15 GHz (big cores)
+#   cpu safe     up to 1.2 GHz at a lower voltage: cooler, longer battery
+#   cpu off      no clock changes: the CPUs stay at the bootloader's 1 GHz
+# If the phone hangs or restarts on its own after choosing a level, the next
+# boot drops one level by itself (full -> safe -> off). See phone-help.
+case "${1:-}" in
+"")
+	/usr/local/sbin/gemini-cpufreq status
+	t=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1)
+	[ -n "$t" ] && echo "Hottest sensor:    $((t / 1000)) °C"
+	;;
+full|safe|off)
+	[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+	/usr/local/sbin/gemini-cpufreq set "$1" || exit 1
+	systemctl restart gemini-cpufreq.service
+	sleep 1
+	/usr/local/sbin/gemini-cpufreq status
+	[ "$1" = off ] || echo "Kept after the next reboot unless the phone hangs within 10 minutes."
+	;;
+*)
+	sed -n '2,8s/^# \{0,1\}//p' "$0"
+	exit 1
+	;;
+esac
