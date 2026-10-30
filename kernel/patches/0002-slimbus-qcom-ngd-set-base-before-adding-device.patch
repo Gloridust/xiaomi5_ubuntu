@@ -1,0 +1,41 @@
+From: Ethan Zou <gloridust@gmail.com>
+Date: Sat, 31 Oct 2026 00:45:00 +0800
+Subject: [PATCH] slimbus: qcom-ngd-ctrl: set the NGD register base before
+ adding its device
+
+of_qcom_slim_ngd_register() fills in ngd->base only after
+platform_device_add(). Adding the device probes it, and the probe can
+already queue ngd_up_work; when the worker runs first it reads
+NGD_STATUS from a NULL base:
+
+  Unable to handle kernel NULL pointer dereference at virtual address 0000000000000004
+  Workqueue: events qcom_slim_ngd_up_worker [slim_qcom_ngd_ctrl]
+  pc : qcom_slim_ngd_runtime_resume+0xb0/0x198 [slim_qcom_ngd_ctrl]
+
+Seen on a Xiaomi Mi 5 (MSM8996) at boot; the worker then hangs and
+takes the rest of the system with it. Compute the base first.
+---
+--- a/drivers/slimbus/qcom-ngd-ctrl.c
++++ b/drivers/slimbus/qcom-ngd-ctrl.c
+@@ -1550,6 +1550,12 @@
+ 			return ret;
+ 		}
+ 		ngd->pdev->dev.of_node = node;
++		/*
++		 * Set up the registers before adding the device: probing it can
++		 * already queue ngd_up_work, which reads them.
++		 */
++		ngd->base = ctrl->base + ngd->id * data->offset +
++					(ngd->id - 1) * data->size;
+ 		ctrl->ngd = ngd;
+ 
+ 		ret = platform_device_add(ngd->pdev);
+@@ -1559,8 +1565,6 @@
+ 			of_node_put(node);
+ 			return ret;
+ 		}
+-		ngd->base = ctrl->base + ngd->id * data->offset +
+-					(ngd->id - 1) * data->size;
+ 
+ 		return 0;
+ 	}
