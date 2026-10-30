@@ -1,0 +1,48 @@
+#!/bin/bash
+# Keeps the clock right across reboots and power-off.
+#
+# The Mi 5's PMIC clock (rtc-pm8xxx) keeps ticking while the phone is off but
+# Linux can't set it: TrustZone blocks writes, and Android instead keeps an
+# offset in its own files. Without help the phone boots into 1970 (or the date
+# the image was built) and stays there until NTP gets a chance.
+#
+# So keep the offset ourselves, in /var/lib/gemini/rtc-offset:
+#   restore  at boot: system time = RTC + saved offset
+#   save     at shutdown and hourly: offset = system time - RTC
+# "save" also records the time itself; if the RTC was reset (battery ran
+# flat), restore never moves the clock back past that.
+set -euo pipefail
+
+RTC=/sys/class/rtc/rtc0/since_epoch
+STATE="${GEMINI_RTC_STATE:-/var/lib/gemini/rtc-offset}"
+
+rtc() { cat "${GEMINI_RTC:-$RTC}"; }
+now() { date +%s; }
+
+case "${1:-}" in
+restore)
+	[ -r "$STATE" ] || { echo "gemini-rtc-offset: no saved offset yet"; exit 0; }
+	read -r offset last < "$STATE" || true
+	[[ "$offset" =~ ^-?[0-9]+$ ]] || { echo "gemini-rtc-offset: bad $STATE" >&2; exit 0; }
+	[[ "${last:-}" =~ ^[0-9]+$ ]] || last=0
+	t=$(( $(rtc) + offset ))
+	if [ "$t" -lt "$last" ]; then
+		echo "gemini-rtc-offset: RTC was reset, continuing from the last saved time"
+		t=$last
+	fi
+	if [ "$t" -gt "$(now)" ]; then
+		date -u -s "@$t" >/dev/null
+		echo "gemini-rtc-offset: clock set to $(date -u -d "@$t" '+%F %T') UTC"
+	fi
+	;;
+save)
+	n=$(now)
+	mkdir -p "${STATE%/*}"
+	echo "$(( n - $(rtc) )) $n" > "$STATE.tmp"
+	mv "$STATE.tmp" "$STATE"
+	;;
+*)
+	echo "usage: $0 restore|save" >&2
+	exit 2
+	;;
+esac

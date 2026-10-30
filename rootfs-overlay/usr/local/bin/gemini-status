@@ -29,10 +29,11 @@ done
 b "Temps" "${temps:-n/a}"
 
 if command -v nmcli >/dev/null; then
-	b "WiFi" "$(nmcli -t -f DEVICE,STATE,CONNECTION dev | grep -E '^wlan' | tr '\n' ' ')"
+	b "WiFi" "$(nmcli -t -f DEVICE,TYPE,STATE,CONNECTION dev | awk -F: '$2=="wifi"{print $1": "$3" "$4}' | tr '\n' ' ')"
 fi
 b "IP" "$(ip -br -4 addr | awk '$1!="lo"{print $1"="$3}' | tr '\n' ' ')"
 b "Bluetooth" "$(ls /sys/class/bluetooth 2>/dev/null | tr '\n' ' ')"
+b "Sensors" "$(cat /sys/bus/iio/devices/iio:device*/name 2>/dev/null | sed 's/^qcom-smgr-//' | tr '\n' ' ')"
 
 dsps=""
 for rp in /sys/class/remoteproc/remoteproc*; do

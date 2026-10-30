@@ -85,7 +85,8 @@ except SystemExit:
 U, D, E = ec.KEY_UP, ec.KEY_DOWN, ec.KEY_ENTER
 want = [(U, 1), (U, 0), (D, 1), (D, 0), (E, 1), (E, 0), (U, 1), (U, 0)]
 assert sent == want, "remapped keys: %r" % sent
-assert states == [False, True], "screen states: %r" % states
+# on at start (from a known state), off with the power key, on again on wake
+assert states == [True, False, True], "screen states: %r" % states
 assert gpio.grabbed and resin.grabbed and not pwr.grabbed, "button devices must be grabbed"
 assert True in grab_seen, "touchscreen should be grabbed while the screen is off"
 assert not touch.grabbed, "touchscreen released after waking"

@@ -77,7 +77,12 @@ try:
     check("ls -l /boot/boot.img", r"boot\.img-")
     check("systemd-analyze", r"graphical\.target reached|multi-user\.target reached")
     # phone tools
-    check("systemctl is-enabled gemini-wifi-watchdog.timer gemini-powerkey buffyboard | sort -u", r"^enabled$")
+    check("systemctl is-enabled gemini-wifi-watchdog.timer", r"^enabled$")
+    # sway UI: enabled, but skipped here (no /dev/dri/card0 in QEMU); console UI: keyboard + power key
+    check("{ systemctl is-enabled gemini-sway 2>/dev/null || systemctl is-enabled gemini-powerkey buffyboard; } | sort -u",
+          r"^enabled$")
+    check("[ ! -e /etc/systemd/system/gemini-sway.service ] || systemctl show -p ConditionResult gemini-sway",
+          r"^(ConditionResult=no)?$")
     check("sudo -n wifi status; echo rc=$?", r"No WiFi device")  # no WiFi chip in QEMU, but sudo works
     check("grep -c '^HOTSPOT_PASSWORD=' /etc/default/gemini", r"^1$")
     check("phone-help | head -2", r"easy commands")
@@ -89,6 +94,10 @@ try:
         # Claude Code from Anthropic's official installer, on this image
         check("install-claude 2>&1 | tail -4", r"Done\. Start Claude Code", timeout=1500)
         check("~/.local/bin/claude --version", r"\d+\.\d+\.\d+", timeout=600)
+        # pi from the pinned lockfile, Node.js from the Ubuntu archive
+        check("echo %s | sudo -S -p '' apt-get install -y -q nodejs npm >/dev/null 2>&1; echo rc=$?" % PW, r"rc=0", timeout=1500)
+        check("install-pi --no-key 2>&1 | tail -4", r"Done: pi \d", timeout=1500)
+        check("~/.pi/agent/bin/pi --version", r"\d+\.\d+\.\d+", timeout=600)
     send("echo %s | sudo -S -p '' poweroff" % PW)
     expect("Power down|reboot: ", 600)
 except TimeoutError as e:

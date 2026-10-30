@@ -1,0 +1,7 @@
+[Unit]
+Description=Save the clock offset from the RTC
+ConditionPathExists=/sys/class/rtc/rtc0/since_epoch
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-rtc-offset save

@@ -1,11 +1,29 @@
 #!/bin/sh
-# Turn the sway outputs on/off: gemini-sway-screen on|off|toggle
+# Screen on/off in the sway session: gemini-sway-screen on|off|toggle
+#
+# "Off" is the backlight at 0 plus the touchscreen disabled, so the phone
+# doesn't type on its own in a pocket. Not sway's "output power off": the msm
+# driver rejects the atomic commit that disables the panel (EINVAL), sway
+# keeps the output on and nothing changes. The JDI panel runs in command
+# mode, so a dark panel with no new frames costs next to nothing.
+BL=$(ls -d /sys/class/backlight/* 2>/dev/null | head -1)
+STATE="${XDG_RUNTIME_DIR:-/tmp}/gemini-screen-off"   # holds the brightness to restore
+
+off() {
+	[ -e "$STATE" ] && return
+	cat "$BL/brightness" > "$STATE" 2>/dev/null || echo 0 > "$STATE"
+	swaymsg 'input type:touch events disabled' >/dev/null
+	echo 0 > "$BL/brightness"
+}
+on() {
+	b=$(cat "$STATE" 2>/dev/null)
+	[ "${b:-0}" -gt 0 ] || b=$(( $(cat "$BL/max_brightness") / 2 ))
+	echo "$b" > "$BL/brightness"
+	swaymsg 'input type:touch events enabled' >/dev/null
+	rm -f "$STATE"
+}
 case "${1:-toggle}" in
-on)  swaymsg 'output * power on' ;;
-off) swaymsg 'output * power off' ;;
-*)   if swaymsg -t get_outputs | grep -q '"power": true'; then
-	     swaymsg 'output * power off'
-     else
-	     swaymsg 'output * power on'
-     fi ;;
-esac >/dev/null
+on)  on ;;
+off) off ;;
+*)   if [ -e "$STATE" ]; then on; else off; fi ;;
+esac

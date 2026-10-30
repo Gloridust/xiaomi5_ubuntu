@@ -1,0 +1,21 @@
+#!/bin/bash
+# Input current limit when charging from a PC's USB port (an "SDP").
+# Run by udev on every charger change (90-gemini.rules).
+#
+# The charger starts at the USB 2.0 limit, 500 mA, which is less than the
+# phone uses with the screen on: plugged into a PC it still discharges.
+# USB_PC_CURRENT=900 in /etc/default/gemini switches the charger to its
+# USB 3.0 setting, 900 mA. Only for USB 3.0 ports: a USB 2.0 port may cut
+# its power when asked for more than 500 mA. Wall chargers (DCP/CDP) are
+# not affected; the charger finds their limit itself (AICL).
+psy="${1:-/sys/class/power_supply/qcom-smbchg-usb}"
+want=$(sed -n 's/^USB_PC_CURRENT=\([0-9]*\).*/\1/p' "${GEMINI_CONF:-/etc/default/gemini}" 2>/dev/null)
+case "$want" in
+500|900) ;;
+*) exit 0 ;;
+esac
+[ "$(cat "$psy/online" 2>/dev/null)" = 1 ] || exit 0
+grep -q '\[SDP\]' "$psy/usb_type" 2>/dev/null || exit 0
+[ "$(cat "$psy/input_current_limit")" = "$((want * 1000))" ] && exit 0
+echo "$((want * 1000))" > "$psy/input_current_limit"
+echo "gemini-usb-current: PC USB port, input limit ${want} mA"

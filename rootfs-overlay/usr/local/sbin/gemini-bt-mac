@@ -1,19 +1,53 @@
 #!/bin/bash
 # The Mi 5's QCA6174 Bluetooth has no MAC address of its own under Linux
 # (Android sets it from the persist partition), so the kernel leaves the
-# controller "unconfigured". Give it a stable address derived from the serial.
+# controller "unconfigured". Give it the phone's own address from persist,
+# or a stable one derived from the serial if that can't be read.
 set -euo pipefail
 
-idx="${1:-0}"
-info=$(btmgmt --index "$idx" info 2>/dev/null || true)
+idx="${1:-hci0}"
+CACHE=/var/lib/gemini/bt-address
+
+# btmgmt only runs its command when it has a terminal; with stdin on
+# /dev/null (as under systemd) it waits forever. Give it a pseudo-terminal.
+mgmt() { timeout 10 script -qec "btmgmt --index $idx $*" /dev/null; }
+
+info=$(mgmt info 2>/dev/null || true)
 if echo "$info" | grep -qiE 'addr ([0-9a-f]{2}:){5}[0-9a-f]{2}' &&
    ! echo "$info" | grep -qiE 'addr (00:00:00:00:00:00|00:00:00:00:5a:ad)'; then
 	exit 0   # already has a usable address
 fi
 
-serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
-[ -n "$serial" ] || serial=$(cat /etc/machine-id)
-addr=$(echo -n "bt$serial" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*/02:\1:\2:\3:\4:\5/')
+# Android keeps it in persist:/wlan_bt/bt.mac, 6 bytes in reverse order.
+persist_addr() {
+	local mnt part=/dev/disk/by-partlabel/persist out=""
+	[ -b "$part" ] || return 0
+	mnt=$(mktemp -d)
+	if mount -o ro,noload "$part" "$mnt" 2>/dev/null; then
+		if [ -f "$mnt/wlan_bt/bt.mac" ] && [ "$(stat -c %s "$mnt/wlan_bt/bt.mac")" = 6 ]; then
+			out=$(od -An -tx1 "$mnt/wlan_bt/bt.mac" | awk '{print toupper($6":"$5":"$4":"$3":"$2":"$1)}')
+		fi
+		umount "$mnt"
+	fi
+	rmdir "$mnt"
+	echo "$out"
+}
 
-btmgmt --index "$idx" public-addr "$addr"
-echo "gemini-bt-mac: hci$idx address set to $addr"
+addr=""
+[ -s "$CACHE" ] && addr=$(cat "$CACHE")
+if [ -z "$addr" ]; then
+	addr=$(persist_addr)
+	case "$addr" in ""|00:00:00:00:00:00|FF:FF:FF:FF:FF:FF) addr="" ;; esac
+	if [ -n "$addr" ]; then
+		mkdir -p "${CACHE%/*}"
+		echo "$addr" > "$CACHE"
+	fi
+fi
+if [ -z "$addr" ]; then
+	serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
+	[ -n "$serial" ] || serial=$(cat /etc/machine-id)
+	addr=$(echo -n "bt$serial" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*/02:\1:\2:\3:\4:\5/')
+fi
+
+mgmt public-addr "$addr"
+echo "gemini-bt-mac: $idx address set to $addr"

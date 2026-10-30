@@ -1,0 +1,11 @@
+[Unit]
+Description=Bring up the WiFi chip if its PCIe link didn't train at boot
+After=systemd-udev-settle.service systemd-modules-load.service
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-pcie-retrain
+
+[Install]
+WantedBy=multi-user.target

@@ -34,14 +34,14 @@ Options (environment variables):
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `UI` | `console` | `console` = text console + buffyboard keyboard; `sway` = touch GUI with terminal + wvkbd keyboard; `phosh` = phone shell + squeekboard |
+| `UI` | `sway` | `sway` = touch GUI with terminal + wvkbd keyboard (GPU-rendered); `console` = text console + buffyboard keyboard (least RAM); `phosh` = phone shell + squeekboard |
 | `WIFI_SSID`, `WIFI_PASSWORD` | – | connect to this WiFi automatically |
 | `SSH_AUTHORIZED_KEYS` | – | file with SSH public keys for the `ubuntu` user |
 | `DEFAULT_USER`, `DEFAULT_PASSWORD` | `ubuntu` / `ubuntu` | first login (password must be changed) |
 | `EXTRA_PACKAGES` | – | more Ubuntu packages, e.g. `"docker.io nginx"` |
 | `KERNEL_CMDLINE` | see `config/device.conf` | kernel arguments |
 
-Example: `sudo UI=sway WIFI_SSID=home WIFI_PASSWORD=secret ./build.sh`
+Example: `sudo UI=console WIFI_SSID=home WIFI_PASSWORD=secret ./build.sh`
 
 Output in `out/`: `boot.img`, `rootfs.sparse.img`, `linux-image-*.deb`.
 
@@ -101,9 +101,14 @@ The first boot takes about a minute longer. The phone:
 3. copies the signed GPU/DSP/modem firmware from the Android partitions and
    starts the DSPs (`gemini-firmware-install`).
 
-Then the login prompt appears with the **on-screen keyboard** at the bottom.
+Then a terminal opens with the **on-screen keyboard** at the bottom and the
+list of easy commands (`phone-help`).
 
-- Log in as **ubuntu**, password **ubuntu**, then choose a new password.
+- No login on the phone's own screen. The first `sudo` (and the first SSH
+  login) asks for the password **ubuntu** and makes you choose a new one.
+- **Volume up**: show/hide the keyboard. **Volume down**: another terminal
+  (tap the titles at the top to switch).
+- Console builds (`UI=console`): log in as **ubuntu** / **ubuntu** instead.
 - **Power key (short)**: screen off/on. The screen also turns off after 2
   minutes without input (`SCREEN_TIMEOUT` in `/etc/default/gemini`).
 - **Power key (hold 3 s)**: power off.
@@ -137,6 +142,21 @@ claude-tmux         # same, but keeps running if your SSH connection drops
 Or from the menu: *Claude Code*. Log in with your Claude account when it asks.
 The phone has 3 GB RAM plus compressed swap; Claude Code runs fine in the text
 console or over SSH.
+
+## 5c. pi agent (DeepSeek)
+
+```bash
+install-pi          # installs Node.js from Ubuntu and pi, then asks for a DeepSeek API key
+pi                  # start it (DeepSeek is the default model)
+pi-tmux             # same, but keeps running if your SSH connection drops
+pi update           # update pi later
+```
+
+Or from the menu: *AI agents*. Get a key at https://platform.deepseek.com/api_keys;
+it is stored in `~/.pi/agent/auth.json`, readable only by you. `install-pi` does
+not run a downloaded script: it installs the exact package versions pinned in
+`/usr/local/share/gemini/pi/package-lock.json` with `npm ci`. The first start
+takes about 12 s while Node compiles pi, later starts about 4 s.
 
 ## 6. Use it from a PC (USB)
 

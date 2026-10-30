@@ -1,0 +1,17 @@
+# PAM stack for gemini-sway.service: the phone's touch session logs the
+# default user in without a password, like a getty autologin.
+#
+# It can't use "login": the image expires the default password so it must be
+# changed at first login, and login's account check then refuses to start the
+# session at all ("Authentication token is no longer valid", status 224/PAM),
+# leaving the phone on a black screen with no way to type a new password.
+# The account step is skipped here; SSH and the first sudo in the terminal
+# still ask for the new password.
+auth       required   pam_permit.so
+account    required   pam_permit.so
+session    required   pam_loginuid.so
+session    required   pam_env.so readenv=1
+session    required   pam_env.so readenv=1 envfile=/etc/default/locale
+session    required   pam_limits.so
+session    optional   pam_keyinit.so force revoke
+@include common-session

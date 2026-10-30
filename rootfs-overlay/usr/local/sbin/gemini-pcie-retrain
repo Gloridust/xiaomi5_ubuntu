@@ -1,0 +1,24 @@
+#!/bin/bash
+# The WiFi chip (QCA6174) sits on PCIe. On some boots the link doesn't train
+# in time ("qcom-pcie 600000.pcie: Phy link never came up"), the chip never
+# shows up and there is no WiFi until the next reboot. Asking the root port
+# to retrain the link and rescanning the bus brings it back.
+set -u
+ROOT=0000:00:00.0
+wifi_present() { ls -d /sys/bus/pci/devices/0000:01:00.* >/dev/null 2>&1; }
+
+wifi_present && exit 0
+[ -e "/sys/bus/pci/devices/$ROOT" ] || { echo "gemini-pcie-retrain: no PCIe root port"; exit 0; }
+for try in 1 2 3; do
+	# Link Control: Retrain Link
+	setpci -s "$ROOT" CAP_EXP+10.w=0020:0020
+	sleep 1
+	echo 1 > /sys/bus/pci/rescan
+	sleep 1
+	if wifi_present; then
+		echo "gemini-pcie-retrain: WiFi chip found after retraining the link ($try)"
+		exit 0
+	fi
+done
+echo "gemini-pcie-retrain: WiFi chip still missing" >&2
+exit 1

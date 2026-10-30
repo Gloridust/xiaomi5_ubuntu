@@ -2,7 +2,8 @@
 # Keeps the phone reachable. Runs every 2 minutes (gemini-wifi-watchdog.timer):
 #   1. connected with internet          -> nothing to do
 #   2. not connected                    -> rescan and try every saved network
-#   3. still failing after 3 runs       -> reload the WiFi driver (wifi fix)
+#   3. still failing after 3 runs       -> reload the WiFi driver (wifi fix);
+#                                          no WiFi chip at all -> retrain PCIe
 #   4. still failing after HOTSPOT_AFTER runs (and AUTO_HOTSPOT=yes)
 #                                       -> start a hotspot, so you can join it
 #                                          from a laptop/phone and ssh in
@@ -26,6 +27,11 @@ nmcli -t radio wifi 2>/dev/null | grep -q enabled || exit 0
 dev=$(nmcli -t -f DEVICE,TYPE dev | awk -F: '$2=="wifi"{print $1; exit}')
 if [ -z "$dev" ]; then
 	fails=$((fails + 1)); save
+	# PCIe link down since boot: no chip, so reloading the driver won't help
+	if ! ls -d /sys/bus/pci/devices/0000:01:00.* >/dev/null 2>&1; then
+		/usr/local/sbin/gemini-pcie-retrain
+		exit 0
+	fi
 	if [ $((fails % 3)) -eq 0 ]; then
 		log "no WiFi device, reloading driver"
 		modprobe -r ath10k_pci; sleep 2; modprobe ath10k_pci

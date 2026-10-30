@@ -1,0 +1,7 @@
+#!/bin/sh
+# Turn the screen off after SCREEN_TIMEOUT seconds without input
+# (/etc/default/gemini, 0 = never), like gemini-powerkey does on the text
+# console. Started by the sway config; screen-timeout restarts it.
+t=$(sed -n 's/^SCREEN_TIMEOUT=\([0-9]*\).*/\1/p' /etc/default/gemini 2>/dev/null)
+[ "${t:-120}" -gt 0 ] || exit 0
+exec swayidle -w timeout "${t:-120}" '/usr/local/bin/gemini-sway-screen off'

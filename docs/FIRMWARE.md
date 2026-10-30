@@ -21,8 +21,13 @@ they can't be redistributed. The kernel expects them in
 | `a530_zap.mbn` | GPU 3D acceleration | `system`: `/vendor/firmware/a530_zap.*` |
 | `venus.mbn` | video decode/encode | `modem` or `system`: `venus.*` |
 | `adsp.mbn` | audio | `modem` partition: `image/adsp.*` |
-| `slpi.mbn` | sensor DSP | `modem` partition: `image/slpi.*` |
+| `slpi.mbn` | sensor DSP | `modem` partition: `image/slpi_a1.*` (the stock gemini device tree's name; `slpi.*` also accepted) |
 | `mba.mbn`, `modem.mbn` | modem | `modem` partition: `image/mba.mbn`, `image/modem.*` |
+
+The sensor DSP also needs its **sensor registry** (calibration and sensor
+list), which the kernel serves to it. It comes from the `persist` partition
+(`sensors/sns.reg`) and is installed as
+`/lib/firmware/qcom/sensors/sns.reg-xiaomi,gemini`.
 
 Android stores most of them split into `name.mdt` + `name.b00`…`name.bNN`.
 `gemini-firmware-install` joins them into one `.mbn` (same as
@@ -30,9 +35,10 @@ Android stores most of them split into `name.mdt` + `name.b00`…`name.bNN`.
 
 ### Option A – automatic (default)
 
-On first boot `gemini-firmware.service` mounts the Android `modem`, `system`
-and `vendor` partitions read-only, installs what it finds and starts the DSPs.
-Re-run any time:
+At every boot `gemini-firmware.service` checks for missing files; if any are
+missing it mounts the Android `modem`, `system`, `vendor` and `persist`
+partitions read-only, installs what it finds and starts the DSPs (when
+nothing is missing it exits at once). Re-run any time:
 
 ```bash
 sudo gemini-firmware-install --force

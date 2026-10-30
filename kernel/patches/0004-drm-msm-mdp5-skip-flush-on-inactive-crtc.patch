@@ -1,0 +1,70 @@
+From: Ethan Zou <gloridust@gmail.com>
+Date: Sat, 31 Oct 2026 01:45:00 +0800
+Subject: [PATCH] drm/msm/mdp5: don't flush or wait for PP_DONE on a
+ switched-off CRTC
+
+With the screen blanked through fbdev the CRTC stays enabled but
+inactive, and fbcon (or anything drawing into the fbdev buffer) keeps
+committing plane updates to it. mdp5_crtc_atomic_flush() then programs
+the runtime-suspended MDP and, for a command-mode panel, re-arms the
+PP_DONE completion, which can never fire because the interface is off.
+Every such commit then stalls twice for the 50 ms timeout and logs
+
+  msm_mdp 901000.display-controller: pp done time out, lm=2
+
+several times a second for as long as the screen is off (Xiaomi Mi 5,
+JDI R63452 command-mode panel).
+
+Skip the hardware flush for an inactive CRTC (sending its event right
+away), don't wait for a flush that never happened, and complete the
+PP_DONE completion when the CRTC is disabled so nothing is left waiting
+on it.
+---
+--- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
++++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
+@@ -501,8 +501,11 @@ static void mdp5_crtc_atomic_disable(struct drm_crtc *crtc,
+ 	/* Disable/save vblank irq handling before power is disabled */
+ 	drm_crtc_vblank_off(crtc);
+ 
+-	if (mdp5_cstate->cmd_mode)
++	if (mdp5_cstate->cmd_mode) {
+ 		mdp_irq_unregister(&mdp5_kms->base, &mdp5_crtc->pp_done);
++		/* no PP_DONE will come any more: don't leave waiters hanging */
++		complete_all(&mdp5_crtc->pp_completion);
++	}
+ 
+ 	mdp_irq_unregister(&mdp5_kms->base, &mdp5_crtc->err);
+ 	pm_runtime_put_sync(dev);
+@@ -818,6 +821,21 @@ static void mdp5_crtc_atomic_flush(struct drm_crtc *crtc,
+ 	if (unlikely(!mdp5_cstate->ctl))
+ 		return;
+ 
++	/*
++	 * Plane updates on a CRTC that is switched off (e.g. fbcon drawing
++	 * while the screen is blanked): the MDP is runtime-suspended, so don't
++	 * touch it, and a command-mode panel would never signal PP_DONE.
++	 */
++	if (!crtc->state->active) {
++		spin_lock_irqsave(&dev->event_lock, flags);
++		if (mdp5_crtc->event) {
++			drm_crtc_send_vblank_event(crtc, mdp5_crtc->event);
++			mdp5_crtc->event = NULL;
++		}
++		spin_unlock_irqrestore(&dev->event_lock, flags);
++		return;
++	}
++
+ 	blend_setup(crtc);
+ 
+ 	/* PP_DONE irq is only used by command mode for now.
+@@ -1310,6 +1328,10 @@ void mdp5_crtc_wait_for_commit_done(struct drm_crtc *crtc)
+ {
+ 	struct mdp5_crtc_state *mdp5_cstate = to_mdp5_crtc_state(crtc->state);
+ 
++	/* nothing was flushed to a switched-off CRTC (see atomic_flush) */
++	if (!crtc->state->active)
++		return;
++
+ 	if (mdp5_cstate->cmd_mode)
+ 		mdp5_crtc_wait_for_pp_done(crtc);
+ 	else

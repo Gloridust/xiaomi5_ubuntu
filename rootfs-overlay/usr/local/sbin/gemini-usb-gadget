@@ -24,6 +24,20 @@ mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
 [ -e "$G/UDC" ] && [ -n "$(cat "$G/UDC")" ] && exit 0   # already up
 
 udc=$(ls /sys/class/udc 2>/dev/null | head -n1 || true)
+
+# On the real phone the USB PHY PLL sometimes fails to lock at boot
+# ("QUSB2PHY pll lock failed"), dwc3 gives up with -EBUSY and the phone never
+# shows up on the PC. Binding the controller again usually works.
+DWC3=/sys/bus/platform/devices/6a00000.usb
+tries=0
+while [ -z "$udc" ] && [ -e "$DWC3" ] && [ ! -e "$DWC3/driver" ] && [ $tries -lt 10 ]; do
+	tries=$((tries + 1))
+	echo "USB controller failed to start, retrying ($tries)"
+	echo 6a00000.usb > /sys/bus/platform/drivers/dwc3/bind 2>/dev/null || true
+	sleep 2
+	udc=$(ls /sys/class/udc 2>/dev/null | head -n1 || true)
+done
+
 if [ -z "$udc" ]; then
 	# Controller not there yet (still probing, or in OTG host mode). udev
 	# starts this service again when it appears (90-gemini.rules).

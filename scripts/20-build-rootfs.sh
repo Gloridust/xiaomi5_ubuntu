@@ -2,7 +2,7 @@
 # Build the Ubuntu 26.04 arm64 root filesystem for the Mi 5 in work/rootfs.
 #
 # Optional environment:
-#   UI=console|sway|phosh      on-screen keyboard / UI flavour (default console)
+#   UI=sway|console|phosh      on-screen keyboard / UI flavour (default sway)
 #   EXTRA_PACKAGES="a b c"     more Ubuntu packages to install
 #   WIFI_SSID / WIFI_PASSWORD  pre-configure a WiFi network
 #   SSH_AUTHORIZED_KEYS=file   install these keys for the default user

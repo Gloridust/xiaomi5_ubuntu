@@ -5,16 +5,22 @@ After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.servic
 Wants=dbus.socket
 After=dbus.socket
 ConditionPathExists=/dev/tty0
+# no display (e.g. the QEMU boot test): stay on the text console
+ConditionPathExists=/dev/dri/card0
 
 [Service]
-# uid 1000 = the default user created by the image build
+# uid 1000 = the default user created by the image build. Its own PAM
+# stack: "login" refuses the session while the first-boot password is expired.
 User=1000
-PAMName=login
+PAMName=gemini-sway
 WorkingDirectory=~
 Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_CURRENT_DESKTOP=sway
+# Switch to tty7 before sway starts, not after: as ExecStartPost the switch
+# raced systemd setting up (hanging up, deallocating) tty7 for sway, and sway
+# was often gone before it logged anything, restarting every 3 s.
+ExecStartPre=+/usr/bin/chvt 7
 ExecStart=/usr/bin/sway -c /usr/local/share/gemini/sway/config
-ExecStartPost=+/usr/bin/chvt 7
 Restart=always
 RestartSec=3
 TTYPath=/dev/tty7

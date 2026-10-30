@@ -33,6 +33,11 @@ SCREEN_TIMEOUT=120
 # Volume up/down and Home button act as arrow up/down and Enter
 KEY_REMAP=yes
 
+# Charging from a PC's USB port: 500 (mA, USB 2.0) or 900 (USB 3.0 ports only;
+# a USB 2.0 port may switch off). At 500 the phone can still discharge while
+# plugged in. Takes effect on the next plug-in, or: sudo gemini-usb-current
+USB_PC_CURRENT=500
+
 # No WiFi for HOTSPOT_AFTER checks (2 min each) -> start a rescue hotspot,
 # so you can join it from a laptop and ssh in. The password is created on
 # first boot (HOTSPOT_PASSWORD below) and shown by:  wifi status
@@ -158,7 +163,8 @@ systemd_enable() { in_root systemctl enable "$@" >/dev/null 2>&1 || echo "     (
 systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadget.service \
 	systemd-networkd.service NetworkManager.service \
 	systemd-resolved.service bluetooth.service rmtfs.service \
-	ModemManager.service gemini-wifi-watchdog.timer
+	ModemManager.service gemini-wifi-watchdog.timer \
+	gemini-rtc-offset.service gemini-rtc-offset-save.timer gemini-pcie-retrain.service
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \
 	systemd-firstboot.service sleep.target suspend.target hibernate.target \
 	hybrid-sleep.target suspend-then-hibernate.target >/dev/null
@@ -185,7 +191,7 @@ EOF
 	;;
 esac
 # Remove the GUI session files when the console UI is used
-[ "${UI}" = sway ] || rm -f "$R/etc/systemd/system/gemini-sway.service"
+[ "${UI}" = sway ] || rm -f "$R/etc/systemd/system/gemini-sway.service" "$R/etc/pam.d/gemini-sway"
 
 if [ -n "${KERNEL_DEB}" ]; then
 	log "Installing kernel $(basename "${KERNEL_DEB}")"

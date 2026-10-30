@@ -1,0 +1,56 @@
+#!/usr/bin/python3 -I
+"""Status line for the sway bar: i3status plus the GPU clock.
+
+i3status has no GPU module. The Adreno's busy percentage is only in debugfs
+(root only, and sampling it keeps the GPU's performance counters running), so
+show its clock instead: devfreq raises it from 133 MHz towards 510 MHz as the
+GPU gets busy, which says the same thing for free.
+"""
+import json
+import subprocess
+import sys
+
+CONF = "/usr/local/share/gemini/sway/i3status.conf"
+GPU_FREQ = "/sys/class/devfreq/b00000.gpu/cur_freq"
+AFTER = "memory"  # put the GPU block after this i3status module
+
+
+def gpu_block():
+    try:
+        with open(GPU_FREQ) as f:
+            mhz = int(f.read()) // 1000000
+    except (OSError, ValueError):
+        return None
+    return {"name": "gpu", "full_text": "GPU %dM" % mhz}
+
+
+def main():
+    conf = sys.argv[1] if len(sys.argv) > 1 else CONF
+    p = subprocess.Popen(["i3status", "-c", conf], stdout=subprocess.PIPE, text=True)
+    out = sys.stdout
+    for line in p.stdout:
+        body = line.strip()
+        prefix = ""
+        if body.startswith(","):
+            prefix, body = ",", body[1:]
+        if not body.startswith("[{"):
+            out.write(line)  # protocol header and the opening "["
+            out.flush()
+            continue
+        try:
+            blocks = json.loads(body)
+        except ValueError:
+            out.write(line)
+            out.flush()
+            continue
+        gpu = gpu_block()
+        if gpu:
+            at = next((i + 1 for i, b in enumerate(blocks) if b.get("name") == AFTER), len(blocks))
+            blocks.insert(at, gpu)
+        out.write(prefix + json.dumps(blocks, ensure_ascii=False) + "\n")
+        out.flush()
+    sys.exit(p.wait())
+
+
+if __name__ == "__main__":
+    main()
