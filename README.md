@@ -43,12 +43,14 @@ be redistributed. **The phone copies them from its own Android partitions on
 first boot** (`gemini-firmware-install`), or you can bake them in at build
 time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 
-> **Status:** the Ubuntu 26.04 rootfs build, the kernel-install → initramfs →
-> `boot.img` chain, the image packing and the firmware tooling have been run
-> and tested; the kernel compile runs in the GitHub Actions workflow. The port
-> has **not yet been booted on a physical Mi 5**. Driver status above comes
-> from the upstream kernel / postmarketOS work on the same hardware. Please
-> report what works on yours.
+> **Status:** the full build (kernel, Ubuntu 26.04 rootfs, `boot.img`,
+> rootfs image) runs end to end, and the resulting kernel + rootfs **boot to a
+> working Ubuntu 26.04 login in QEMU** (`tests/qemu-boot.sh`: root found by
+> label, first-boot setup, services, AppArmor, zram, clean poweroff). The
+> phone-specific hardware can't be emulated, and the port has **not yet been
+> booted on a physical Mi 5**. Driver status above comes from the upstream
+> kernel / postmarketOS work on the same hardware. Please report what works
+> on yours.
 
 ## Quick start
 
@@ -92,7 +94,7 @@ scripts/30-make-images.sh   boot.img + ext4/sparse rootfs image
 scripts/flash.sh            fastboot flashing with safety checks
 scripts/extract-firmware.sh pull signed firmware from the phone with adb
 rootfs-overlay/             files installed into the phone's filesystem
-tests/                      automated tests (run in CI)
+tests/                      automated tests incl. a QEMU boot test (run in CI)
 tools/mkbootimg/            AOSP mkbootimg (Ubuntu 24.04's package is broken)
 ```
 

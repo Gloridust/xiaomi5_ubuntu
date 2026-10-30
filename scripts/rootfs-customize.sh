@@ -145,7 +145,7 @@ fi
 log "Enabling services"
 systemd_enable() { in_root systemctl enable "$@" >/dev/null 2>&1 || echo "     (could not enable $*)"; }
 systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadget.service \
-	serial-getty@ttyGS0.service systemd-networkd.service NetworkManager.service \
+	systemd-networkd.service NetworkManager.service \
 	systemd-resolved.service bluetooth.service rmtfs.service \
 	ModemManager.service
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \

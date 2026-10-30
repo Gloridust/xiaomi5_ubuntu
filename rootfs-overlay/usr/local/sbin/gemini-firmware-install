@@ -196,8 +196,9 @@ def main():
             mounted = mount_partitions(tmp)
             roots = mounted
         if not roots:
-            log("no firmware sources found")
-            return 1
+            log("no firmware sources found (Android partitions missing?)")
+            # first-boot mode: not an error, try again next boot
+            return 0 if args.auto else 1
         indexes = [index_dir(r) for r in roots]
 
         os.makedirs(args.dest, exist_ok=True)

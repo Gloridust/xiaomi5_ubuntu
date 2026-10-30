@@ -74,4 +74,6 @@ create_gadget() {
 [ -e "$G/configs/c.1/ncm.usb0" ] || create_gadget
 cd "$G"
 echo "$udc" > UDC
+# login prompt on the USB serial port (started here: ttyGS0 only exists now)
+systemctl --no-block start serial-getty@ttyGS0.service 2>/dev/null || true
 echo "USB gadget up on $udc (network: $(cat functions/ncm.usb0/ifname), serial: ttyGS0)"
