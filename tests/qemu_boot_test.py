@@ -69,7 +69,8 @@ try:
     check("findmnt -no OPTIONS /", r"^rw")
     check("findmnt -no LABEL /", r"gemini-root")
     # rmtfs/pd-mapper need Qualcomm hardware: allowed to fail in a VM
-    check("systemctl --failed --no-legend --plain | grep -vE 'rmtfs|pd-mapper' | wc -l", r"^0$")
+    check("systemctl --failed --no-legend --plain | grep -vE 'rmtfs|pd-mapper' | awk '{printf \"%s \", $1}'; echo '| failed units'",
+          r"^\| failed units$")
     check("systemctl is-active gemini-firstboot NetworkManager systemd-networkd ssh.socket | sort -u", r"^active$")
     check("ls /etc/ssh/ssh_host_*_key | wc -l", r"^[1-9]")
     check("swapon --show=NAME --noheadings", r"zram")
