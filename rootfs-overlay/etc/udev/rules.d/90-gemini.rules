@@ -1,7 +1,9 @@
 # Xiaomi Mi 5 (gemini)
 
-# Start the on-screen keyboard as soon as the display driver is up
-SUBSYSTEM=="graphics", KERNEL=="fb0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="buffyboard.service"
+# Start the on-screen keyboard as soon as there is a framebuffer. Restart it on
+# every new fb0 (e.g. after the msm display driver is reloaded), otherwise it
+# keeps drawing into the old one.
+SUBSYSTEM=="graphics", KERNEL=="fb0", ACTION=="add", RUN+="/bin/systemctl --no-block restart buffyboard.service"
 
 # Bring up USB networking/serial once the USB controller exists
 SUBSYSTEM=="udc", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gemini-usb-gadget.service"

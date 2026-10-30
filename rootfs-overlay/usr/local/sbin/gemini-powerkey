@@ -16,6 +16,7 @@ Not used by the sway/phosh UIs, which manage the screen themselves.
 import glob
 import os
 import select
+import subprocess
 import sys
 import time
 
@@ -60,6 +61,11 @@ class Screen:
             write(fb, "0" if on else "1")
         for bl in glob.glob("/sys/class/backlight/*/bl_power"):
             write(bl, "0" if on else "4")
+        if on:
+            # Unblanking redraws the whole console over the on-screen
+            # keyboard, which only repaints keys as they are touched.
+            subprocess.run(["systemctl", "--no-block", "restart", "buffyboard.service"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
 def open_devices():

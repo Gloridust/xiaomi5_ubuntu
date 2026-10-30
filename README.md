@@ -24,14 +24,14 @@ small server, for example to run **Claude Code**.
 
 | Component | Driver | Status |
 |---|---|---|
-| CPU (4 cores), cpufreq, thermal | qcom-cpufreq-nvmem, tsens | ✅ upstream |
+| CPU (4 cores), thermal | tsens | ✅ fixed at 1.04 GHz ² |
 | Storage (UFS) | ufs-qcom (built in) | ✅ upstream |
-| Display 1080×1920 | msm DRM + `panel-jdi-fhd-r63452` | ✅ upstream |
+| Display 1080×1920 | msm DRM + `panel-jdi-fhd-r63452` | ✅ tested on a Mi 5 |
 | Backlight | qcom-wled | ✅ upstream |
-| Touchscreen | Synaptics RMI4 (I²C) | ✅ upstream |
-| **WiFi** 802.11ac | QCA6174 on PCIe, `ath10k_pci` + linux-firmware | ✅ upstream |
+| Touchscreen | Synaptics RMI4 (I²C) | ✅ tested on a Mi 5 |
+| **WiFi** 802.11ac | QCA6174 on PCIe, `ath10k_pci` + linux-firmware | ❌ PCIe link doesn't come up yet |
 | **Bluetooth** 4.2 | QCA6174 UART, `hci_uart` + linux-firmware | ✅ (MAC set by `gemini-bt-mac`) |
-| USB 2.0 device mode | dwc3 → **USB network + serial console** to a PC | ✅ |
+| USB 2.0 device mode | dwc3 → **USB network + serial console** to a PC | ✅ tested on a Mi 5 ³ |
 | USB OTG host (keyboard, disks) | dwc3 + TUSB320L type-C + PMI8994 VBUS | ✅ |
 | Battery level, charging | PMI8994 fuel gauge + smbchg (msm8996-mainline) | ✅ fork patches |
 | Buttons (power, volume, home) | pm8941-pwrkey, gpio-keys | ✅ upstream |
@@ -49,14 +49,16 @@ be redistributed. **The phone copies them from its own Android partitions on
 first boot** (`gemini-firmware-install`), or you can bake them in at build
 time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 
-> **Status:** the full build (kernel, Ubuntu 26.04 rootfs, `boot.img`,
-> rootfs image) runs end to end, and the resulting kernel + rootfs **boot to a
-> working Ubuntu 26.04 login in QEMU** (`tests/qemu-boot.sh`: root found by
-> label, first-boot setup, services, AppArmor, zram, clean poweroff). The
-> phone-specific hardware can't be emulated, and the port has **not yet been
-> booted on a physical Mi 5**. Driver status above comes from the upstream
-> kernel / postmarketOS work on the same hardware. Please report what works
-> on yours.
+² The device tree has no CPU voltage scaling yet, and changing the CPU clock
+without it locks up the phone, so cpufreq is off (`cpufreq.off=1`) and the CPUs
+stay at the bootloader's 1.04 GHz.
+³ The USB PHY sometimes fails to start at boot; `gemini-usb-gadget` retries.
+
+> **Status:** boots to a working Ubuntu 26.04 login on a real Mi 5 (display,
+> touch keyboard, USB network + SSH, storage, battery charging tested).
+> Not working yet: WiFi. Other rows marked "upstream" come from the upstream
+> kernel / postmarketOS work on the same hardware and are not tested here yet.
+> The build also boots in QEMU (`tests/qemu-boot.sh`).
 
 ## Quick start
 
