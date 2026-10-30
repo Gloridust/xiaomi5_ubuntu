@@ -65,10 +65,18 @@ blocked() {   # prints why the phone should stay awake
 		echo "someone is logged in over ssh"; return 0
 	fi
 	local p
+	p=$(inhibitors) && { echo "$p blocks sleep"; return 0; }
 	for p in $(conf SLEEP_BLOCKERS "claude pi node apt apt-get dpkg unattended-upgr"); do
 		pgrep -x "$p" >/dev/null 2>&1 && { echo "$p is running"; return 0; }
 	done
 	return 1
+}
+
+inhibitors() {   # prints who holds a "block" sleep inhibitor
+	local w
+	w=$(systemd-inhibit --list --no-pager --no-legend 2>/dev/null |
+		awk '$NF == "block" && /sleep/ {print $1}' | sort -u | tr '\n' ' ')
+	[ -n "$w" ] && echo "${w% }"
 }
 
 pmstat() { cat "$SYS/power/suspend_stats/$1" 2>/dev/null || echo 0; }
@@ -78,8 +86,15 @@ suspend_now() {
 	local before fails
 	before=$(attempts)
 	fails=$(pmstat fail)
-	if ! "$SYSTEMCTL" suspend --check-inhibitors=yes; then
-		log "systemd refused to sleep (a program holds a sleep inhibitor: systemd-inhibit --list)"
+	local who
+	if who=$(inhibitors); then
+		log "a program blocks sleep: $who (systemd-inhibit --list)"
+		return 1
+	fi
+	# Not --check-inhibitors=yes: that also refuses whenever a user is logged
+	# in (always, on the phone's own screen). Block inhibitors are checked above.
+	if ! "$SYSTEMCTL" suspend --check-inhibitors=no; then
+		log "systemd refused to sleep (journalctl -b -u systemd-logind)"
 		return 1
 	fi
 	# systemctl only queues the suspend; the counters change once it's over

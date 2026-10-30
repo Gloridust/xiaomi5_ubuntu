@@ -13,6 +13,7 @@ echo 0 > "$S/success"; echo 0 > "$S/fail"
 echo 0 > "$BL/bl_power"; echo USB > "$USB/type"
 # no process is running, no ssh (pgrep/ss stubs first in PATH)
 printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"; printf '#!/bin/sh\n[ -e %s/ssh ] && echo x\nexit 0\n' "$T" > "$T/bin/ss"
+printf '#!/bin/sh\n[ -e %s/inhibit ] && echo "ubuntu 1000 ubuntu 123 apt-get sleep:shutdown Installing block"\nexit 0\n' "$T" > "$T/bin/systemd-inhibit"
 chmod +x "$T/bin/"*; export PATH="$T/bin:$PATH"
 
 # systemctl suspend runs the hooks and counts a success, or a failure
@@ -54,7 +55,9 @@ power 0; touch "$T/ssh"; auto
 check "$(calls)" 0 "ssh session"
 rm "$T/ssh"; printf '#!/bin/sh\n[ "$2" = claude ]\n' > "$T/bin/pgrep"; auto
 check "$(calls)" 0 "Claude Code running"
-printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"; auto
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"; touch "$T/inhibit"; auto
+check "$(calls)" 0 "block inhibitor"
+rm "$T/inhibit"; auto
 check "$(calls)" 1 "screen off 10 min on battery -> sleep"
 [ ! -e "$T/lib/sleep-pending" ] || { echo "FAIL: marker left after waking"; exit 1; }
 auto
