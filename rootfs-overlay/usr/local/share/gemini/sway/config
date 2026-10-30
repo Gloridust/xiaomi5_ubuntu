@@ -1,0 +1,38 @@
+# Sway session for the Xiaomi Mi 5 (1080x1920, 5.15")
+#   Volume up      show/hide the on-screen keyboard
+#   Volume down    open another terminal
+#   Power (short)  screen on/off      Power (3 s): power off
+#   Swipe the top bar / tap a title to switch windows
+
+set $term foot -c /usr/local/share/gemini/sway/foot.ini
+
+output DSI-1 scale 2.5
+output * bg #2c001e solid_color
+input type:touch map_to_output DSI-1
+seat * hide_cursor 2000
+
+default_border pixel 2
+hide_edge_borders smart
+workspace_layout tabbed
+focus_follows_mouse no
+font pango:DejaVu Sans 8
+
+bar {
+	position top
+	status_command i3status -c /usr/local/share/gemini/sway/i3status.conf
+	font pango:DejaVu Sans Mono 8
+	colors {
+		background #2c001e
+		statusline #ffffff
+	}
+}
+
+bindsym XF86AudioRaiseVolume exec pkill -RTMIN wvkbd-mobintl
+bindsym XF86AudioLowerVolume exec $term
+bindsym --locked XF86PowerOff exec /usr/local/bin/gemini-sway-screen toggle
+
+exec wvkbd-mobintl -H 260 -L 180
+exec $term
+exec swayidle -w timeout 120 '/usr/local/bin/gemini-sway-screen off'
+
+include /etc/sway/config.d/*

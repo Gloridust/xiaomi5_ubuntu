@@ -1,0 +1,11 @@
+#!/bin/sh
+# Turn the sway outputs on/off: gemini-sway-screen on|off|toggle
+case "${1:-toggle}" in
+on)  swaymsg 'output * power on' ;;
+off) swaymsg 'output * power off' ;;
+*)   if swaymsg -t get_outputs | grep -q '"power": true'; then
+	     swaymsg 'output * power off'
+     else
+	     swaymsg 'output * power on'
+     fi ;;
+esac >/dev/null

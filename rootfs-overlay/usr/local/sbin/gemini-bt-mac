@@ -1,0 +1,19 @@
+#!/bin/bash
+# The Mi 5's QCA6174 Bluetooth has no MAC address of its own under Linux
+# (Android sets it from the persist partition), so the kernel leaves the
+# controller "unconfigured". Give it a stable address derived from the serial.
+set -euo pipefail
+
+idx="${1:-0}"
+info=$(btmgmt --index "$idx" info 2>/dev/null || true)
+if echo "$info" | grep -qiE 'addr ([0-9a-f]{2}:){5}[0-9a-f]{2}' &&
+   ! echo "$info" | grep -qiE 'addr (00:00:00:00:00:00|00:00:00:00:5a:ad)'; then
+	exit 0   # already has a usable address
+fi
+
+serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
+[ -n "$serial" ] || serial=$(cat /etc/machine-id)
+addr=$(echo -n "bt$serial" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*/02:\1:\2:\3:\4:\5/')
+
+btmgmt --index "$idx" public-addr "$addr"
+echo "gemini-bt-mac: hci$idx address set to $addr"

@@ -1,0 +1,6 @@
+work/
+out/
+firmware/
+*.img
+__pycache__/
+*.pyc

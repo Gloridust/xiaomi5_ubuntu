@@ -1,0 +1,1 @@
+Copied from Ubuntu 26.04 package mkbootimg 34.0.5-12build1 (AOSP system/tools/mkbootimg, Apache-2.0). Ubuntu 24.04's package is broken (imports a missing 'gki' module).

@@ -1,0 +1,90 @@
+#!/bin/bash
+# Build an Android boot image (kernel + appended DTB + initramfs) for the
+# Xiaomi Mi 5 bootloader and, when running on the phone, flash it.
+#
+# Called automatically by:
+#   /etc/kernel/postinst.d/zz-gemini-bootimg      <version> [image]
+#   /etc/initramfs/post-update.d/zz-gemini-bootimg <version> <initrd>
+# Manual use:
+#   gemini-mkbootimg [version]        rebuild /boot/boot.img-<version>
+#   gemini-mkbootimg --flash [ver]    rebuild and write it to the boot partition
+set -euo pipefail
+
+# GEMINI_ROOT lets tests run this against a directory instead of /
+R="${GEMINI_ROOT:-}"
+CONF="$R/etc/default/gemini"
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+: "${KERNEL_CMDLINE:=root=LABEL=gemini-root rootwait rw console=tty0}"
+: "${DTB:=qcom/msm8996-xiaomi-gemini.dtb}"
+: "${FLASH_BOOT:=yes}"
+
+force_flash=no
+if [ "${1:-}" = "--flash" ]; then force_flash=yes; shift; fi
+
+ver="${1:-$(uname -r)}"
+initrd="$R/boot/initrd.img-${ver}"
+# post-update.d passes the initrd path as $2
+if [ -n "${2:-}" ] && [ -f "${2}" ] && [ "${2#"$R"/boot/initrd}" != "${2}" ]; then initrd="$2"; fi
+kernel="$R/boot/vmlinuz-${ver}"
+
+dtb=""
+for d in "$R/usr/lib/linux-image-${ver}/${DTB}" "$R/boot/dtbs/${ver}/${DTB}" "$R/lib/firmware/${ver}/device-tree/${DTB}"; do
+	[ -f "$d" ] && { dtb="$d"; break; }
+done
+
+if [ ! -f "$kernel" ] || [ -z "$dtb" ]; then
+	echo "gemini-mkbootimg: kernel or dtb for ${ver} not found, skipping" >&2
+	exit 0
+fi
+if [ ! -f "$initrd" ]; then
+	# The initramfs hook calls us again once the initrd exists.
+	echo "gemini-mkbootimg: ${initrd} not there yet, skipping" >&2
+	exit 0
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+if gzip -t "$kernel" 2>/dev/null; then
+	cp "$kernel" "$tmp/Image.gz"
+else
+	gzip -9cn "$kernel" > "$tmp/Image.gz"
+fi
+cat "$tmp/Image.gz" "$dtb" > "$tmp/Image.gz-dtb"
+
+out="$R/boot/boot.img-${ver}"
+mkbootimg \
+	--header_version 0 \
+	--kernel "$tmp/Image.gz-dtb" \
+	--ramdisk "$initrd" \
+	--cmdline "$KERNEL_CMDLINE" \
+	--base 0x80000000 \
+	--kernel_offset 0x00008000 \
+	--ramdisk_offset 0x01000000 \
+	--second_offset 0x00f00000 \
+	--tags_offset 0x00000100 \
+	--pagesize 4096 \
+	-o "$out.tmp"
+mv "$out.tmp" "$out"
+echo "gemini-mkbootimg: wrote $out ($(du -h "$out" | cut -f1))"
+
+# Newest installed kernel is the default one.
+newest=$(for k in "$R"/boot/vmlinuz-*; do [ -e "$k" ] && echo "${k##*/vmlinuz-}"; done | sort -V | tail -n1 || true)
+if [ "$ver" = "$newest" ]; then
+	ln -sfn "boot.img-${ver}" "$R/boot/boot.img"
+fi
+
+on_device() { [ -z "$R" ] && grep -qs 'xiaomi,gemini' /proc/device-tree/compatible; }
+
+if [ "$force_flash" = yes ] || { [ "$FLASH_BOOT" = yes ] && [ "$ver" = "$newest" ] && on_device; }; then
+	on_device || { echo "gemini-mkbootimg: not running on a Mi 5, refusing to flash" >&2; exit 1; }
+	part=/dev/disk/by-partlabel/boot
+	[ -b "$part" ] || { echo "gemini-mkbootimg: $part missing" >&2; exit 1; }
+	size=$(blockdev --getsize64 "$part")
+	[ "$(stat -c %s "$out")" -le "$size" ] || { echo "gemini-mkbootimg: image larger than boot partition" >&2; exit 1; }
+	# Keep the currently flashed image so it can be restored with fastboot.
+	dd if="$part" of="$R/boot/boot.img.previous" bs=1M status=none
+	dd if="$out" of="$part" bs=1M conv=fsync status=none
+	echo "gemini-mkbootimg: flashed $out to $part (old image saved as /boot/boot.img.previous)"
+fi

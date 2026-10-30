@@ -1,0 +1,11 @@
+[Unit]
+Description=Mi 5 console screen on/off (power key + idle timeout)
+After=systemd-udev-settle.service
+
+[Service]
+ExecStart=/usr/local/sbin/gemini-powerkey
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

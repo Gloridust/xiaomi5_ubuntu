@@ -1,0 +1,6 @@
+# WiFi and everything else is managed by NetworkManager.
+# Connect with:  sudo nmtui      or
+#                sudo nmcli dev wifi connect "SSID" password "PASSWORD"
+network:
+  version: 2
+  renderer: NetworkManager

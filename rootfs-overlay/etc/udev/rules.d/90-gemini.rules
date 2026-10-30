@@ -1,0 +1,16 @@
+# Xiaomi Mi 5 (gemini)
+
+# Start the on-screen keyboard as soon as the display driver is up
+SUBSYSTEM=="graphics", KERNEL=="fb0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="buffyboard.service"
+
+# Bring up USB networking/serial once the USB controller exists
+SUBSYSTEM=="udc", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gemini-usb-gadget.service"
+
+# Bluetooth controller needs a MAC address
+SUBSYSTEM=="bluetooth", ACTION=="add", KERNEL=="hci[0-9]*", ENV{DEVTYPE}=="host", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gemini-bt-mac@%k.service"
+
+# Let the "video" group set the screen brightness without sudo
+SUBSYSTEM=="backlight", ACTION=="add", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+
+# Touchscreen belongs to the built-in display
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Synaptics*", ENV{ID_INPUT_TOUCHSCREEN}="1", ENV{WL_OUTPUT}="DSI-1"

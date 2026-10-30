@@ -1,0 +1,240 @@
+#!/usr/bin/python3 -I
+"""Install the Xiaomi Mi 5 device-specific (signed) firmware.
+
+Mainline Linux expects these files in /lib/firmware/qcom/msm8996/gemini/:
+    a530_zap.mbn  GPU (Adreno 530) zap shader      -> 3D acceleration
+    venus.mbn     video encoder/decoder
+    adsp.mbn      audio DSP                         -> speaker, mic, headphones
+    slpi.mbn      sensor DSP
+    mba.mbn       modem boot authenticator
+    modem.mbn     modem                             -> LTE, SMS, calls
+
+They are signed by Xiaomi, so they cannot ship in this image. The stock
+Android partitions (modem, system, vendor) are untouched by the Ubuntu
+install, so this tool copies the files from there. Android stores most of
+them split (foo.mdt + foo.b00 ... foo.bNN); they are joined ("squashed")
+into a single .mbn here, like pil-squasher does.
+
+Usage:
+    gemini-firmware-install                 read the phone's own partitions
+    gemini-firmware-install --from DIR...   read files you already copied
+    gemini-firmware-install --dest DIR      install somewhere else (image builds)
+"""
+import argparse
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+
+DEST_DEFAULT = "/lib/firmware/qcom/msm8996/gemini"
+STAMP = "/var/lib/gemini/firmware-installed"
+
+# target file -> base names to look for, in order of preference
+WANTED = {
+    "a530_zap.mbn": ["a530_zap"],
+    "venus.mbn": ["venus"],
+    "adsp.mbn": ["adsp"],
+    "slpi.mbn": ["slpi", "slpi_v1", "slpi_v2"],
+    "mba.mbn": ["mba"],
+    "modem.mbn": ["modem"],
+}
+
+PARTITIONS = [  # (partlabel, fstype)
+    ("modem", "vfat"),
+    ("system", "ext4"),
+    ("vendor", "ext4"),
+]
+
+
+def log(msg):
+    print("gemini-firmware: " + msg, flush=True)
+
+
+def elf_phdrs(data):
+    if data[:4] != b"\x7fELF":
+        raise ValueError("not an ELF file")
+    if data[4] == 1:  # ELF32
+        phoff, = struct.unpack_from("<I", data, 28)
+        phentsize, phnum = struct.unpack_from("<HH", data, 42)
+        out = []
+        for i in range(phnum):
+            p = struct.unpack_from("<8I", data, phoff + i * phentsize)
+            out.append({"offset": p[1], "filesz": p[4]})
+        return out
+    if data[4] == 2:  # ELF64
+        phoff, = struct.unpack_from("<Q", data, 32)
+        phentsize, phnum = struct.unpack_from("<HH", data, 54)
+        out = []
+        for i in range(phnum):
+            p = struct.unpack_from("<IIQQQQQQ", data, phoff + i * phentsize)
+            out.append({"offset": p[2], "filesz": p[5]})
+        return out
+    raise ValueError("unknown ELF class")
+
+
+def squash(mdt_path, segment_files):
+    """Join foo.mdt + foo.bNN into one firmware image. Returns bytes."""
+    with open(mdt_path, "rb") as f:
+        mdt = f.read()
+    out = bytearray(mdt)
+    for i, ph in enumerate(elf_phdrs(mdt)):
+        if ph["filesz"] == 0:
+            continue
+        seg_path = segment_files.get("b%02d" % i)
+        end = ph["offset"] + ph["filesz"]
+        if seg_path:
+            with open(seg_path, "rb") as f:
+                seg = f.read(ph["filesz"])
+        elif end <= len(mdt):
+            continue  # segment already inside the .mdt (e.g. hash segment)
+        else:
+            raise FileNotFoundError("segment %d of %s missing" % (i, mdt_path))
+        if len(out) < ph["offset"]:
+            out.extend(b"\0" * (ph["offset"] - len(out)))
+        out[ph["offset"]:ph["offset"] + len(seg)] = seg
+    return bytes(out)
+
+
+def index_dir(root):
+    """Map lower-case file name -> path for every file below root."""
+    idx = {}
+    for dirpath, _dirs, files in os.walk(root, followlinks=False):
+        for name in files:
+            idx.setdefault(name.lower(), os.path.join(dirpath, name))
+    return idx
+
+
+def find_and_build(base, indexes):
+    """Return firmware bytes for base name, searching all indexes."""
+    for idx in indexes:
+        mbn = idx.get(base + ".mbn")
+        if mbn:
+            with open(mbn, "rb") as f:
+                return f.read(), mbn
+        mdt = idx.get(base + ".mdt")
+        if mdt:
+            segs = {}
+            for i in range(100):
+                p = idx.get("%s.b%02d" % (base, i))
+                if p:
+                    segs["b%02d" % i] = p
+            return squash(mdt, segs), mdt
+    return None, None
+
+
+def mount_partitions(tmp):
+    mounted = []
+    for label, fstype in PARTITIONS:
+        dev = "/dev/disk/by-partlabel/" + label
+        if not os.path.exists(dev):
+            continue
+        mnt = os.path.join(tmp, label)
+        os.makedirs(mnt)
+        opts = "ro"
+        if fstype == "ext4":
+            opts = "ro,noload"
+        elif fstype == "vfat":
+            opts = "ro,shortname=lower"
+        r = subprocess.run(["mount", "-t", fstype, "-o", opts, dev, mnt],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode != 0:
+            # system may be an erofs/other fs on custom ROMs: let mount guess
+            r = subprocess.run(["mount", "-o", "ro", dev, mnt],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode == 0:
+            log("mounted %s partition" % label)
+            mounted.append(mnt)
+        else:
+            log("could not mount %s partition (skipped)" % label)
+    return mounted
+
+
+def start_remoteprocs():
+    """Start DSPs that failed to boot earlier because firmware was missing."""
+    base = "/sys/class/remoteproc"
+    if not os.path.isdir(base):
+        return
+    for rp in sorted(os.listdir(base)):
+        try:
+            with open(os.path.join(base, rp, "state")) as f:
+                state = f.read().strip()
+            with open(os.path.join(base, rp, "name")) as f:
+                name = f.read().strip()
+            if state == "offline":
+                with open(os.path.join(base, rp, "state"), "w") as f:
+                    f.write("start")
+                log("started remoteproc %s" % name)
+        except OSError as e:
+            log("could not start %s: %s" % (rp, e))
+    # venus loads its firmware at probe time
+    subprocess.run("modprobe -r venus_enc venus_dec venus_core && modprobe venus_core "
+                   "&& modprobe venus_dec && modprobe venus_enc", shell=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--from", dest="sources", nargs="+", metavar="DIR",
+                    help="directories containing the firmware files")
+    ap.add_argument("--dest", default=DEST_DEFAULT)
+    ap.add_argument("--auto", action="store_true",
+                    help="first-boot mode: write a stamp and start the DSPs")
+    ap.add_argument("--force", action="store_true", help="overwrite existing files")
+    args = ap.parse_args()
+
+    tmp = tempfile.mkdtemp(prefix="gemini-fw-")
+    mounted = []
+    try:
+        if args.sources:
+            roots = args.sources
+        else:
+            if os.geteuid() != 0:
+                sys.exit("run as root")
+            mounted = mount_partitions(tmp)
+            roots = mounted
+        if not roots:
+            log("no firmware sources found")
+            return 1
+        indexes = [index_dir(r) for r in roots]
+
+        os.makedirs(args.dest, exist_ok=True)
+        installed, missing = [], []
+        for target, bases in WANTED.items():
+            dst = os.path.join(args.dest, target)
+            if os.path.exists(dst) and not args.force:
+                log("%s already present" % target)
+                continue
+            data = src = None
+            for b in bases:
+                data, src = find_and_build(b, indexes)
+                if data:
+                    break
+            if not data:
+                missing.append(target)
+                continue
+            with open(dst + ".tmp", "wb") as f:
+                f.write(data)
+            os.replace(dst + ".tmp", dst)
+            installed.append(target)
+            log("installed %s (from %s, %d KiB)" % (target, src, len(data) // 1024))
+
+        if missing:
+            log("not found: %s" % ", ".join(missing))
+        if args.auto:
+            os.makedirs(os.path.dirname(STAMP), exist_ok=True)
+            with open(STAMP, "w") as f:
+                f.write("installed: %s\nmissing: %s\n" % (" ".join(installed), " ".join(missing)))
+            if installed:
+                start_remoteprocs()
+        return 0
+    finally:
+        for m in mounted:
+            subprocess.run(["umount", m], stderr=subprocess.DEVNULL)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

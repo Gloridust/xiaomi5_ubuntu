@@ -1,0 +1,13 @@
+[Unit]
+Description=Buffyboard on-screen keyboard for the text console
+Documentation=man:buffyboard(1)
+After=systemd-user-sessions.service getty@tty1.service
+ConditionPathExists=/dev/fb0
+
+[Service]
+ExecStart=/usr/bin/buffyboard
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

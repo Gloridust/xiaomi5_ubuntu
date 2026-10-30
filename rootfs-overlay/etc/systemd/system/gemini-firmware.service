@@ -1,0 +1,13 @@
+[Unit]
+Description=Copy Mi 5 GPU/DSP/modem firmware from the Android partitions
+ConditionPathExists=!/var/lib/gemini/firmware-installed
+After=local-fs.target systemd-udev-settle.service
+Before=rmtfs.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-firmware-install --auto
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

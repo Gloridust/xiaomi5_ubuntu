@@ -1,0 +1,77 @@
+#!/bin/bash
+# USB gadget for the Mi 5: network (NCM) + serial console (ACM).
+# Plug the phone into a PC and you get:
+#   - a network interface: phone is 172.16.42.1, PC gets 172.16.42.x by DHCP
+#       ssh ubuntu@172.16.42.1
+#   - a serial console on /dev/ttyACM0 (PC side), e.g.  screen /dev/ttyACM0 115200
+set -euo pipefail
+
+G=/sys/kernel/config/usb_gadget/gemini
+
+stop() {
+	[ -d "$G" ] || exit 0
+	echo "" > "$G/UDC" 2>/dev/null || true
+	rm -f "$G"/configs/c.1/ncm.usb0 "$G"/configs/c.1/acm.GS0
+	rmdir "$G"/configs/c.1/strings/0x409 "$G"/configs/c.1 2>/dev/null || true
+	rmdir "$G"/functions/* "$G"/strings/0x409 2>/dev/null || true
+	rmdir "$G" 2>/dev/null || true
+}
+
+if [ "${1:-start}" = stop ]; then stop; exit 0; fi
+
+modprobe libcomposite
+mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+[ -e "$G/UDC" ] && [ -n "$(cat "$G/UDC")" ] && exit 0   # already up
+
+udc=""
+for _ in $(seq 1 30); do
+	udc=$(ls /sys/class/udc 2>/dev/null | head -n1 || true)
+	[ -n "$udc" ] && break
+	sleep 1
+done
+[ -n "$udc" ] || { echo "no USB device controller found" >&2; exit 1; }
+
+serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
+[ -n "$serial" ] || serial=$(cut -c1-16 /etc/machine-id)
+
+# Stable MAC addresses derived from the serial number, so the PC keeps
+# seeing the same interface after every reboot.
+mac() { echo -n "$1$serial" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*/02:\1:\2:\3:\4:\5/'; }
+
+create_gadget() {
+	mkdir -p "$G"
+	cd "$G"
+	echo 0x1d6b > idVendor        # Linux Foundation
+	echo 0x0104 > idProduct       # Multifunction Composite Gadget
+	echo 0x0100 > bcdDevice
+	echo 0x0200 > bcdUSB
+	echo 0xEF > bDeviceClass      # Misc / IAD, needed by Windows for composite
+	echo 0x02 > bDeviceSubClass
+	echo 0x01 > bDeviceProtocol
+
+	mkdir -p strings/0x409
+	echo "$serial" > strings/0x409/serialnumber
+	echo "Xiaomi" > strings/0x409/manufacturer
+	echo "Mi 5 (Ubuntu)" > strings/0x409/product
+
+	mkdir -p configs/c.1/strings/0x409
+	echo "NCM + ACM" > configs/c.1/strings/0x409/configuration
+	echo 500 > configs/c.1/MaxPower
+
+	mkdir -p functions/ncm.usb0
+	echo usb0 > functions/ncm.usb0/ifname 2>/dev/null || true
+	mac host > functions/ncm.usb0/host_addr
+	mac dev > functions/ncm.usb0/dev_addr
+
+	mkdir -p functions/acm.GS0
+
+	ln -sf functions/ncm.usb0 configs/c.1/
+	ln -sf functions/acm.GS0 configs/c.1/
+}
+
+# Already configured (e.g. the controller went away for OTG host mode and
+# came back): only re-bind, attributes can't be changed while linked.
+[ -e "$G/configs/c.1/ncm.usb0" ] || create_gadget
+cd "$G"
+echo "$udc" > UDC
+echo "USB gadget up on $udc (network: $(cat functions/ncm.usb0/ifname), serial: ttyGS0)"

@@ -1,0 +1,31 @@
+[Unit]
+Description=Mi 5 touch session (sway + terminal + on-screen keyboard)
+Conflicts=getty@tty7.service
+After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
+Wants=dbus.socket
+After=dbus.socket
+ConditionPathExists=/dev/tty0
+
+[Service]
+# uid 1000 = the default user created by the image build
+User=1000
+PAMName=login
+WorkingDirectory=~
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=sway
+ExecStart=/usr/bin/sway -c /usr/local/share/gemini/sway/config
+ExecStartPost=+/usr/bin/chvt 7
+Restart=always
+RestartSec=3
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty7
+UtmpMode=user
+
+[Install]
+WantedBy=graphical.target

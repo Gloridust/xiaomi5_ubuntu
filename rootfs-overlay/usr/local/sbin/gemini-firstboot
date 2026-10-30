@@ -1,0 +1,18 @@
+#!/bin/bash
+# One-time setup on the first boot of a freshly flashed image.
+set -u
+STAMP=/var/lib/gemini/firstboot-done
+mkdir -p /var/lib/gemini
+
+# 1. Grow the root filesystem to fill the whole userdata partition.
+root=$(findmnt -no SOURCE /)
+if [ -b "$root" ]; then
+	echo "gemini-firstboot: growing $root"
+	resize2fs "$root" || echo "gemini-firstboot: resize2fs failed" >&2
+fi
+
+# 2. Unique SSH host keys for this phone (the image ships without any).
+ssh-keygen -A
+
+# 3. Fresh machine-id-based things are handled by systemd itself.
+touch "$STAMP"
