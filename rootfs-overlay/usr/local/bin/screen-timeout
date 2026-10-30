@@ -1,0 +1,10 @@
+#!/bin/bash
+# Turn the screen off after N seconds without input (0 = never):
+#   screen-timeout 120
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+CONF=/etc/default/gemini
+if [ -z "${1:-}" ]; then grep '^SCREEN_TIMEOUT=' "$CONF"; exit 0; fi
+[[ "$1" =~ ^[0-9]+$ ]] || { echo "usage: screen-timeout SECONDS"; exit 1; }
+sed -i "s/^SCREEN_TIMEOUT=.*/SCREEN_TIMEOUT=$1/" "$CONF"
+systemctl restart gemini-powerkey 2>/dev/null
+echo "Screen timeout: $1 s"

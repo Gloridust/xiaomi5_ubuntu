@@ -1,0 +1,186 @@
+#!/sbin/sh
+# TWRP installer: Ubuntu 26.04 for the Xiaomi Mi 5 (gemini)
+#
+# 1. checks this really is a Mi 5
+# 2. saves the GPU/DSP/modem firmware from the Android partitions
+#    (it is copied into Ubuntu, which installs it on first boot)
+# 3. saves the current boot image (restore: /var/lib/gemini/android-boot.img)
+# 4. writes Ubuntu to the userdata partition  (ERASES Android data)
+# 5. writes the Ubuntu boot image
+#
+# Arguments from TWRP: $1 = API version, $2 = output fd, $3 = this zip.
+# The GEMINI_* variables are only for the automated test.
+
+OUTFD="$2"
+ZIP="$3"
+BYNAME=/dev/block/bootdevice/by-name
+BOOT="${GEMINI_BOOT_DEV:-$BYNAME/boot}"
+DATA="${GEMINI_DATA_DEV:-$BYNAME/userdata}"
+MODEM="${GEMINI_MODEM_DEV:-$BYNAME/modem}"
+TMP="${GEMINI_TMP:-/tmp/gemini-install}"
+LABEL=gemini-root
+
+ui_print() {
+	echo "ui_print $*" >> /proc/self/fd/"$OUTFD"
+	echo "ui_print" >> /proc/self/fd/"$OUTFD"
+}
+abort() {
+	ui_print "ERROR: $*"
+	ui_print "Nothing was changed on the phone."
+	cleanup
+	exit 1
+}
+cleanup() {
+	for m in "$TMP"/modem "$TMP"/root; do umount "$m" 2>/dev/null; done
+	[ -n "$COPIED_ZIP" ] && rm -f "$COPIED_ZIP"
+}
+loopopt() { [ -f "$1" ] && echo ",loop"; }   # test images are plain files
+exists() { [ -b "$1" ] || [ -f "$1" ]; }
+
+ui_print " "
+ui_print "=== Ubuntu 26.04 for Xiaomi Mi 5 ==="
+ui_print " "
+
+# ---- 1. device check -------------------------------------------------------
+if [ "${GEMINI_SKIP_DEVICE_CHECK:-0}" != 1 ]; then
+	dev="$(getprop ro.product.device 2>/dev/null) $(getprop ro.build.product 2>/dev/null)"
+	case "$dev" in
+	*gemini*) ;;
+	*) abort "this zip is only for the Xiaomi Mi 5 (gemini), this phone is: $dev" ;;
+	esac
+fi
+for p in "$BOOT" "$DATA"; do exists "$p" || abort "partition $p not found"; done
+
+mkdir -p "$TMP" || abort "cannot create $TMP"
+COPIED_ZIP=""
+
+# unzip -p (stream a file out of the zip) must work
+unzip -p "$ZIP" META-INF/com/google/android/updater-script >/dev/null 2>&1 ||
+	abort "this recovery's unzip can't read the package"
+
+# ---- the zip must not live on the partition we are about to erase ---------
+real=$(readlink -f "$ZIP" 2>/dev/null || echo "$ZIP")
+case "$real" in
+/data/*|/sdcard/*|/storage/*|/mnt/*)
+	size=$(wc -c < "$ZIP")
+	free=$(df -k /tmp | awk 'NR==2{print $4}')
+	if [ $((size / 1024 + 65536)) -gt "${free:-0}" ]; then
+		abort "the zip is on internal storage, which gets erased. Use 'adb sideload' or a USB OTG drive instead."
+	fi
+	ui_print "Copying the package to RAM (it is on internal storage)..."
+	COPIED_ZIP="$TMP/package.zip"
+	cp "$ZIP" "$COPIED_ZIP" || abort "copy to RAM failed"
+	ZIP="$COPIED_ZIP"
+	;;
+esac
+
+# ---- 2. save device firmware ------------------------------------------------
+ui_print "Saving device firmware..."
+FW="$TMP/fw"
+mkdir -p "$FW" "$TMP/modem"
+want_fw() {
+	n=$(echo "$1" | tr 'A-Z' 'a-z')
+	case "$n" in
+	adsp.*|modem.*|mba.*|slpi.*|slpi_v1.*|slpi_v2.*|venus.*|a530_zap.*) ;;
+	*) return 1 ;;
+	esac
+	case "$n" in
+	*.mdt|*.mbn|*.b[0-9][0-9]) return 0 ;;
+	esac
+	return 1
+}
+copy_fw_from() {
+	[ -d "$1" ] || return 0
+	for f in "$1"/*; do
+		[ -f "$f" ] || continue
+		b=$(basename "$f")
+		want_fw "$b" || continue
+		lb=$(echo "$b" | tr 'A-Z' 'a-z')
+		[ -e "$FW/$lb" ] || cp "$f" "$FW/$lb"
+	done
+}
+if exists "$MODEM" && { mount -t vfat -o "ro$(loopopt "$MODEM")" "$MODEM" "$TMP/modem" 2>/dev/null ||
+	mount -o "ro$(loopopt "$MODEM")" "$MODEM" "$TMP/modem" 2>/dev/null; }; then
+	copy_fw_from "$TMP/modem/image"
+	copy_fw_from "$TMP/modem/IMAGE"
+	umount "$TMP/modem"
+fi
+if [ "${GEMINI_SKIP_SYSTEM_MOUNT:-0}" != 1 ]; then
+	for m in /system /vendor /system_root; do mount "$m" 2>/dev/null; done
+fi
+for d in ${GEMINI_FW_DIRS:-/vendor/firmware /system/vendor/firmware /system/etc/firmware \
+	/system/system/vendor/firmware /system/system/etc/firmware \
+	/system_root/system/vendor/firmware /system_root/system/etc/firmware /firmware/image}; do
+	copy_fw_from "$d"
+done
+n=$(ls "$FW" | wc -l)
+ui_print "  found $n firmware files"
+
+# ---- 3. save the current boot image ----------------------------------------
+dd if="$BOOT" of="$TMP/android-boot.img" bs=1048576 2>/dev/null || abort "cannot read the boot partition"
+
+# ---- 4. write Ubuntu to userdata -------------------------------------------
+if [ "${GEMINI_SKIP_SYSTEM_MOUNT:-0}" != 1 ]; then
+	for m in /sdcard /data/media /data; do umount "$m" 2>/dev/null; done
+	grep -q ' /data ' /proc/mounts && abort "could not unmount /data (go back to the TWRP home screen and try again)"
+fi
+datasize=$(blockdev --getsize64 "$DATA" 2>/dev/null || wc -c < "$DATA")
+need=$(unzip -p "$ZIP" rootfs.size 2>/dev/null)
+[ -n "$need" ] && [ "$datasize" -lt "$need" ] && abort "userdata partition is too small ($datasize < $need bytes)"
+
+ui_print "Writing Ubuntu to the userdata partition."
+ui_print "This takes 3-10 minutes - don't touch the phone..."
+rm -f "$TMP"/rc.*
+{ unzip -p "$ZIP" rootfs.img.gz; echo $? > "$TMP/rc.unzip"; } |
+	{ gunzip -c; echo $? > "$TMP/rc.gunzip"; } |
+	dd of="$DATA" bs=4194304 conv=notrunc 2>"$TMP/dd.log"
+rc_dd=$?
+sync
+if [ "$(cat "$TMP/rc.unzip")" != 0 ] || [ "$(cat "$TMP/rc.gunzip")" != 0 ] || [ "$rc_dd" != 0 ]; then
+	ui_print "ERROR: writing Ubuntu failed (unzip=$(cat "$TMP/rc.unzip") gunzip=$(cat "$TMP/rc.gunzip") dd=$rc_dd)."
+	ui_print "Android data is already erased. Fix the problem and flash this zip again."
+	cleanup; exit 1
+fi
+label=$(dd if="$DATA" bs=1 skip=1144 count=16 2>/dev/null | tr -d '\000')
+if [ "$label" != "$LABEL" ]; then
+	ui_print "ERROR: the written filesystem looks wrong (label '$label'). Flash the zip again."
+	cleanup; exit 1
+fi
+
+# put the saved firmware and boot image into the new system
+mkdir -p "$TMP/root"
+if mount -t ext4 -o "rw$(loopopt "$DATA")" "$DATA" "$TMP/root" 2>/dev/null; then
+	mkdir -p "$TMP/root/var/lib/gemini/firmware-stage"
+	cp "$FW"/* "$TMP/root/var/lib/gemini/firmware-stage/" 2>/dev/null
+	cp "$TMP/android-boot.img" "$TMP/root/var/lib/gemini/android-boot.img"
+	date > "$TMP/root/var/lib/gemini/installed-from-twrp"
+	sync
+	umount "$TMP/root"
+else
+	ui_print "  (could not mount the new system to copy firmware; Ubuntu will"
+	ui_print "   read it from the Android partitions itself on first boot)"
+fi
+
+# ---- 5. write the boot image -----------------------------------------------
+# From here on Android data is gone, so failures say so instead of abort().
+fail() {
+	ui_print "ERROR: $*"
+	ui_print "Ubuntu is on userdata but the boot image was not written."
+	ui_print "Flash this zip again, or: fastboot flash boot boot.img"
+	cleanup; exit 1
+}
+ui_print "Writing the Ubuntu boot image..."
+unzip -p "$ZIP" boot.img > "$TMP/boot.img" || fail "boot.img missing in the zip"
+bootsize=$(blockdev --getsize64 "$BOOT" 2>/dev/null || wc -c < "$BOOT")
+[ "$(wc -c < "$TMP/boot.img")" -le "$bootsize" ] || fail "boot.img is bigger than the boot partition"
+dd if="$TMP/boot.img" of="$BOOT" bs=1048576 conv=notrunc 2>/dev/null || fail "writing the boot partition failed"
+sync
+
+cleanup
+rm -rf "$TMP"
+ui_print " "
+ui_print "Done! Tap 'Reboot System'."
+ui_print "First boot takes 1-2 minutes. Login: ubuntu / ubuntu"
+ui_print "(you'll be asked to choose a new password)"
+ui_print " "
+exit 0

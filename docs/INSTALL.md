@@ -52,7 +52,27 @@ it contains `boot.img`, `rootfs.sparse.img.xz`, the kernel `.deb` and
 `SHA256SUMS`. Artifacts are kept for 30 days; push a `v*` tag to publish a
 permanent release instead.
 
-## 3. Flash
+## 3. Install
+
+### With TWRP (easiest if you already have TWRP)
+
+1. Download `ubuntu-26.04-xiaomi-gemini-twrp.zip` from the latest
+   [release](https://github.com/Gloridust/xiaomi5_ubuntu/releases/latest) (or build it: `sudo scripts/40-make-twrp-zip.sh`).
+2. Get it to the phone in one of these ways:
+   - **adb sideload** (recommended): TWRP → Advanced → ADB Sideload → swipe, then on the PC
+     `adb sideload ubuntu-26.04-xiaomi-gemini-twrp.zip`
+   - a **USB OTG drive**: TWRP → Install → Select Storage → USB-OTG
+   - internal storage also works: the installer first copies the zip into RAM,
+     because internal storage is erased during the install
+3. TWRP → Install → the zip → swipe. It:
+   - checks the phone is a Mi 5,
+   - saves the GPU/audio/modem firmware from your current system (works with
+     custom ROMs too) into Ubuntu,
+   - keeps a copy of the current boot image (`/var/lib/gemini/android-boot.img`),
+   - writes Ubuntu to userdata and the Ubuntu boot image to boot.
+4. Reboot System.
+
+### With fastboot
 
 Phone in fastboot mode (**Power + Volume Down**), USB connected:
 
@@ -90,14 +110,33 @@ Then the login prompt appears with the **on-screen keyboard** at the bottom.
 
 ## 5. Connect to WiFi
 
+After login the **menu** opens on the phone's screen: *WiFi → Connect to a
+network*, pick yours, type the password. Or on the command line:
+
 ```bash
-sudo nmtui                               # menu: "Activate a connection"
-# or
-sudo nmcli dev wifi list
-sudo nmcli dev wifi connect "MyWiFi" password "secret"
+wifi                                     # pick from a list, asks for the password
+wifi connect "MyWiFi" "secret"
+wifi status                              # connected? IP address?
 ```
 
-NetworkManager remembers the network and reconnects after reboots.
+The phone remembers the network and reconnects by itself. If WiFi is lost,
+a watchdog retries every 2 minutes, resets the WiFi driver after 3 failures,
+and after about 10 minutes starts a **rescue hotspot** called `Mi5-Ubuntu`:
+join it from a laptop or another phone and `ssh ubuntu@10.42.0.1`. Its
+password is shown by `wifi status` (and stored in `/etc/default/gemini`).
+`wifi fix` resets the WiFi by hand.
+
+## 5b. Claude Code
+
+```bash
+install-claude      # Anthropic's official installer (needs internet)
+claude              # start it
+claude-tmux         # same, but keeps running if your SSH connection drops
+```
+
+Or from the menu: *Claude Code*. Log in with your Claude account when it asks.
+The phone has 3 GB RAM plus compressed swap; Claude Code runs fine in the text
+console or over SSH.
 
 ## 6. Use it from a PC (USB)
 

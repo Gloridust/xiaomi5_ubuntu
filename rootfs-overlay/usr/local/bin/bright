@@ -1,0 +1,7 @@
+#!/bin/bash
+# Screen brightness:  bright 50   (percent)    bright   (show current)
+if [ -z "${1:-}" ]; then
+	brightnessctl -m | awk -F, '{print "brightness: " $4}'
+else
+	brightnessctl -q set "${1%\%}%" && brightnessctl -m | awk -F, '{print "brightness: " $4}'
+fi

@@ -1,0 +1,8 @@
+[Unit]
+Description=Keep WiFi connected (reconnect, driver reset, rescue hotspot)
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-wifi-watchdog

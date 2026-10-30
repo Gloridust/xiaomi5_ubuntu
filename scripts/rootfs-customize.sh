@@ -12,6 +12,7 @@ cp -a --no-preserve=ownership "${TOP_DIR}/rootfs-overlay/." "$R/"
 chown -R root:root "$R/usr/local" "$R/etc/systemd" "$R/etc/udev/rules.d" \
 	"$R/etc/NetworkManager/conf.d" "$R/etc/netplan" "$R/etc/initramfs-tools" \
 	"$R/usr/share/alsa/ucm2"
+chown root:root "$R"/etc/sudoers.d/gemini && chmod 0440 "$R"/etc/sudoers.d/gemini
 
 log "Writing /etc/default/gemini"
 cat > "$R/etc/default/gemini" <<EOF
@@ -28,6 +29,16 @@ FLASH_BOOT=yes
 
 # Console UI: turn the screen off after this many idle seconds (0 = never)
 SCREEN_TIMEOUT=120
+
+# Volume up/down and Home button act as arrow up/down and Enter
+KEY_REMAP=yes
+
+# No WiFi for HOTSPOT_AFTER checks (2 min each) -> start a rescue hotspot,
+# so you can join it from a laptop and ssh in. The password is created on
+# first boot (HOTSPOT_PASSWORD below) and shown by:  wifi status
+AUTO_HOTSPOT=yes
+HOTSPOT_SSID="Mi5-Ubuntu"
+HOTSPOT_AFTER=5
 EOF
 
 log "Hostname, hosts, fstab"
@@ -147,7 +158,7 @@ systemd_enable() { in_root systemctl enable "$@" >/dev/null 2>&1 || echo "     (
 systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadget.service \
 	systemd-networkd.service NetworkManager.service \
 	systemd-resolved.service bluetooth.service rmtfs.service \
-	ModemManager.service
+	ModemManager.service gemini-wifi-watchdog.timer
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \
 	systemd-firstboot.service sleep.target suspend.target hibernate.target \
 	hybrid-sleep.target suspend-then-hibernate.target >/dev/null

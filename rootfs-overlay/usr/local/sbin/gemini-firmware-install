@@ -30,6 +30,7 @@ import tempfile
 
 DEST_DEFAULT = "/lib/firmware/qcom/msm8996/gemini"
 STAMP = "/var/lib/gemini/firmware-installed"
+STAGE = "/var/lib/gemini/firmware-stage"  # copied here by the TWRP installer
 
 # target file -> base names to look for, in order of preference
 WANTED = {
@@ -194,7 +195,7 @@ def main():
             if os.geteuid() != 0:
                 sys.exit("run as root")
             mounted = mount_partitions(tmp)
-            roots = mounted
+            roots = ([STAGE] if os.path.isdir(STAGE) else []) + mounted
         if not roots:
             log("no firmware sources found (Android partitions missing?)")
             # first-boot mode: not an error, try again next boot

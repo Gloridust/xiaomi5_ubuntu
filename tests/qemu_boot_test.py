@@ -55,10 +55,10 @@ try:
     expect(PROMPT, 300)
     send("export SYSTEMD_PAGER=cat PAGER=cat"); expect(PROMPT, 60)
 
-    def check(command, want):
+    def check(command, want, timeout=300):
         send(command)
         expect(re.escape(command), 60)
-        out = expect(PROMPT, 300).strip()
+        out = expect(PROMPT, timeout).strip()
         ok = re.search(want, out, re.M) is not None
         print(("PASS " if ok else "FAIL ") + command + "\n     " + out.replace("\n", "\n     "))
         if not ok:
@@ -76,6 +76,19 @@ try:
     check("aa-enabled", r"Yes")
     check("ls -l /boot/boot.img", r"boot\.img-")
     check("systemd-analyze", r"graphical\.target reached|multi-user\.target reached")
+    # phone tools
+    check("systemctl is-enabled gemini-wifi-watchdog.timer gemini-powerkey buffyboard | sort -u", r"^enabled$")
+    check("sudo -n wifi status; echo rc=$?", r"No WiFi device")  # no WiFi chip in QEMU, but sudo works
+    check("grep -c '^HOTSPOT_PASSWORD=' /etc/default/gemini", r"^1$")
+    check("phone-help | head -2", r"easy commands")
+    check("bash -n /usr/local/bin/menu && bash -n /usr/local/bin/wifi && echo syntax-ok", r"syntax-ok")
+    check("for c in whiptail tmux git rg jq nmcli; do command -v $c >/dev/null || echo missing $c; done; echo tools-checked",
+          r"^tools-checked$")
+    check("echo %s | sudo -S -p '' /usr/local/sbin/gemini-wifi-watchdog; echo rc=$?" % PW, r"rc=0")
+    if os.environ.get("QEMU_NET_TESTS") == "1":
+        # Claude Code from Anthropic's official installer, on this image
+        check("install-claude 2>&1 | tail -4", r"Done\. Start Claude Code", timeout=1500)
+        check("~/.local/bin/claude --version", r"\d+\.\d+\.\d+", timeout=600)
     send("echo %s | sudo -S -p '' poweroff" % PW)
     expect("Power down|reboot: ", 600)
 except TimeoutError as e:

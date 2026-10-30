@@ -1,0 +1,6 @@
+#!/bin/bash
+# Run Claude Code inside tmux: if your SSH session drops, run claude-tmux
+# again to get back to the same conversation. Detach: Ctrl-b then d.
+export PATH="$HOME/.local/bin:$PATH"
+command -v claude >/dev/null || { echo "Claude Code is not installed yet. Run:  install-claude"; exit 1; }
+exec tmux new-session -A -s claude claude "$@"

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Update Ubuntu (and the kernel, which also updates the boot image).
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+apt-get update && apt-get -y full-upgrade && apt-get -y autoremove

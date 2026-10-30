@@ -14,5 +14,8 @@ fi
 # 2. Unique SSH host keys for this phone (the image ships without any).
 ssh-keygen -A
 
-# 3. Fresh machine-id-based things are handled by systemd itself.
+# 3. Password for the rescue WiFi hotspot (see: wifi hotspot)
+if ! grep -q '^HOTSPOT_PASSWORD=' /etc/default/gemini 2>/dev/null; then
+	echo "HOTSPOT_PASSWORD=\"$(tr -dc 'a-z0-9' < /dev/urandom | head -c 10)\"" >> /etc/default/gemini
+fi
 touch "$STAMP"

@@ -2,8 +2,14 @@
 
 Run **Ubuntu Server 26.04 "Resolute Raccoon"** (arm64) natively on a Xiaomi Mi 5,
 with a mainline-based Linux kernel, WiFi, Bluetooth, USB networking, battery
-support and a **touch on-screen keyboard** so the phone can be used on its own,
-without a PC.
+support and a **touch on-screen keyboard**, so the phone works on its own as a
+small server, for example to run **Claude Code**.
+
+- Install from **TWRP** with one zip (or with fastboot)
+- A **text menu** (`menu`) and easy commands (`wifi`, `status`, `install-claude`)
+- WiFi that **heals itself**: reconnects, resets the driver, and finally opens
+  a rescue hotspot so you can always get back in
+- Volume keys and Home button navigate the menu
 
 | | |
 |---|---|
@@ -54,25 +60,20 @@ time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 
 ## Quick start
 
-```bash
-# On an Ubuntu 24.04+ PC (x86_64 or arm64), ~20 GB free disk:
-git clone <this repo> && cd xiaomi5_ubuntu
-sudo ./build.sh                    # kernel + Ubuntu rootfs + images  (UI=sway / UI=phosh for a GUI)
+1. Download `ubuntu-26.04-xiaomi-gemini-twrp.zip` from the latest
+   [release](https://github.com/Gloridust/xiaomi5_ubuntu/releases/latest) (built and boot-tested automatically).
+2. TWRP → Advanced → ADB Sideload, then `adb sideload ubuntu-26.04-xiaomi-gemini-twrp.zip`
+   (or TWRP → Install → the zip). This **erases Android's user data**.
+3. Reboot. Log in **ubuntu / ubuntu** and choose a new password.
+4. The menu opens: **WiFi → Connect to a network**.
+5. `install-claude`, then `claude`.
 
-# Phone: unlocked bootloader, hold Power + Volume Down -> fastboot, plug USB
-scripts/flash.sh                   # flashes boot + userdata (erases Android user data)
-```
+Easy commands: [docs/COMMANDS.md](docs/COMMANDS.md). From a PC over USB:
+`ssh ubuntu@172.16.42.1`.
 
-Or download `boot.img` and `rootfs.sparse.img.xz` from the GitHub Actions run /
-release and run `IMAGES_DIR=~/Downloads scripts/flash.sh`.
-
-First login: **ubuntu / ubuntu** (you must pick a new password). Then:
-
-```bash
-sudo nmtui                         # connect to WiFi
-gemini-status                      # battery, WiFi, DSPs, firmware...
-ssh ubuntu@172.16.42.1             # from a PC over the USB cable
-```
+Build it yourself on an Ubuntu 24.04+ PC (~20 GB disk, 1–2 h):
+`sudo ./build.sh && sudo scripts/40-make-twrp-zip.sh` (`UI=sway` or `UI=phosh`
+for a touch GUI; the default console UI needs the least RAM).
 
 Full guide: [docs/INSTALL.md](docs/INSTALL.md) ·
 Hardware details: [docs/HARDWARE.md](docs/HARDWARE.md) ·
@@ -91,6 +92,7 @@ scripts/00-host-deps.sh     install build tools on the PC
 scripts/10-build-kernel.sh  build the kernel as Ubuntu .deb packages
 scripts/20-build-rootfs.sh  mmdebstrap Ubuntu 26.04 arm64 + device setup
 scripts/30-make-images.sh   boot.img + ext4/sparse rootfs image
+scripts/40-make-twrp-zip.sh TWRP-installable zip (twrp/update-binary)
 scripts/flash.sh            fastboot flashing with safety checks
 scripts/extract-firmware.sh pull signed firmware from the phone with adb
 rootfs-overlay/             files installed into the phone's filesystem
@@ -108,7 +110,9 @@ tools/mkbootimg/            AOSP mkbootimg (Ubuntu 24.04's package is broken)
 | `buffyboard.service` | on-screen keyboard on the text console |
 | `gemini-powerkey` | power key toggles the screen; auto screen-off after 2 min |
 | `gemini-bt-mac` | gives the Bluetooth controller a stable MAC address |
-| `gemini-status` | one-screen hardware overview |
+| `gemini-status` / `status` | one-screen hardware overview |
+| `menu`, `wifi`, `install-claude`, `phone-help` | text menu and easy commands ([docs/COMMANDS.md](docs/COMMANDS.md)) |
+| `gemini-wifi-watchdog.timer` | reconnects WiFi, resets the driver, starts a rescue hotspot |
 | `gemini-firstboot` | grows the root filesystem, creates SSH host keys |
 
 ## Credits

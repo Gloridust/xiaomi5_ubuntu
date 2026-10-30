@@ -1,0 +1,84 @@
+#!/bin/bash
+# Keeps the phone reachable. Runs every 2 minutes (gemini-wifi-watchdog.timer):
+#   1. connected with internet          -> nothing to do
+#   2. not connected                    -> rescan and try every saved network
+#   3. still failing after 3 runs       -> reload the WiFi driver (wifi fix)
+#   4. still failing after HOTSPOT_AFTER runs (and AUTO_HOTSPOT=yes)
+#                                       -> start a hotspot, so you can join it
+#                                          from a laptop/phone and ssh in
+#   5. while the hotspot is up and nobody is connected to it, every
+#      HOTSPOT_RETRY runs it tries the saved networks again.
+set -u
+CONF=/etc/default/gemini
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+: "${AUTO_HOTSPOT:=yes}" "${HOTSPOT_AFTER:=5}" "${HOTSPOT_RETRY:=8}"
+STATE=/run/gemini-wifi-watchdog
+HS=gemini-hotspot
+log() { echo "wifi-watchdog: $*"; }
+
+fails=0; hs_runs=0
+# shellcheck source=/dev/null
+[ -r "$STATE" ] && . "$STATE"
+save() { printf 'fails=%d\nhs_runs=%d\n' "$fails" "$hs_runs" > "$STATE"; }
+
+nmcli -t radio wifi 2>/dev/null | grep -q enabled || exit 0
+dev=$(nmcli -t -f DEVICE,TYPE dev | awk -F: '$2=="wifi"{print $1; exit}')
+if [ -z "$dev" ]; then
+	fails=$((fails + 1)); save
+	if [ $((fails % 3)) -eq 0 ]; then
+		log "no WiFi device, reloading driver"
+		modprobe -r ath10k_pci; sleep 2; modprobe ath10k_pci
+	fi
+	exit 0
+fi
+
+active=$(nmcli -t -f DEVICE,CONNECTION dev | awk -F: -v d="$dev" '$1==d{print $2}')
+
+if [ "$active" = "$HS" ]; then
+	hs_runs=$((hs_runs + 1)); save
+	clients=$(iw dev "$dev" station dump 2>/dev/null | grep -c '^Station')
+	if [ "$clients" -eq 0 ] && [ $((hs_runs % HOTSPOT_RETRY)) -eq 0 ]; then
+		log "hotspot idle, trying saved networks again"
+		nmcli con down "$HS" >/dev/null 2>&1; sleep 3
+		active=""
+	else
+		exit 0
+	fi
+fi
+
+if [ -n "$active" ] && nmcli networking connectivity check 2>/dev/null | grep -qE 'full|limited|portal'; then
+	[ "$fails" -ne 0 ] && log "connected to $active again"
+	fails=0; hs_runs=0; save
+	exit 0
+fi
+
+# Not connected: try the saved WiFi networks that are in range.
+nmcli dev wifi rescan ifname "$dev" >/dev/null 2>&1; sleep 4
+visible=$(nmcli -t -f SSID dev wifi list ifname "$dev" 2>/dev/null)
+while IFS=: read -r name type; do
+	[ "$type" = "802-11-wireless" ] || continue
+	[ "$name" = "$HS" ] && continue
+	ssid=$(nmcli -g 802-11-wireless.ssid con show "$name" 2>/dev/null)
+	grep -qxF "$ssid" <<<"$visible" || continue
+	log "trying $name"
+	if nmcli con up id "$name" ifname "$dev" >/dev/null 2>&1; then
+		log "connected to $name"
+		fails=0; hs_runs=0; save
+		exit 0
+	fi
+done < <(nmcli -t -f NAME,TYPE con show)
+
+fails=$((fails + 1)); save
+log "no WiFi connection (attempt $fails)"
+
+if [ "$fails" -eq 3 ]; then
+	log "reloading WiFi driver"
+	modprobe -r ath10k_pci; sleep 2; modprobe ath10k_pci
+fi
+
+if [ "$AUTO_HOTSPOT" = yes ] && [ "$fails" -ge "$HOTSPOT_AFTER" ]; then
+	log "starting rescue hotspot"
+	/usr/local/bin/wifi hotspot on
+	hs_runs=0; save
+fi

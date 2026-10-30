@@ -1,0 +1,2 @@
+# Phone helpers that need root, usable without typing the password
+%sudo ALL=(root) NOPASSWD: /usr/local/bin/wifi, /usr/local/bin/screen-timeout, /usr/bin/nmcli dev wifi rescan

@@ -1,0 +1,23 @@
+#!/bin/bash
+cat <<'TXT'
+ Xiaomi Mi 5 - Ubuntu: easy commands
+ ------------------------------------------------------------
+ menu              menu with everything below (arrows + Enter)
+ wifi              connect to WiFi (pick from a list)
+ wifi status       am I online? what is my IP?
+ wifi fix          WiFi stopped working -> reset it
+ wifi hotspot      phone becomes a hotspot: join it, ssh ubuntu@10.42.0.1
+ status            battery, WiFi, temperature, ...
+ install-claude    install / update Claude Code
+ claude            start Claude Code   (claude-tmux: survives disconnects)
+ bright 40         screen brightness in %
+ screen-timeout 60 screen off after 60 s idle (0 = never)
+ update            update Ubuntu (apt)
+ sudo reboot       restart          sudo poweroff   shut down
+ ------------------------------------------------------------
+ Keys: Power = screen on/off (hold 3 s = power off)
+       Volume up/down = arrow up/down, Home button = Enter
+ USB cable to a PC: ssh ubuntu@172.16.42.1
+ No WiFi for ~10 min: the phone starts hotspot "Mi5-Ubuntu"
+   by itself (password: wifi status, or /etc/default/gemini)
+TXT

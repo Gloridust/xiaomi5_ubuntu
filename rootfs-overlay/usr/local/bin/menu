@@ -1,0 +1,154 @@
+#!/bin/bash
+# Text menu for the Mi 5: arrows (or volume keys) to move, Enter (or the
+# Home button) to choose, Esc to go back. Run it any time with:  menu
+set -u
+export NEWT_COLORS='root=,black window=,black border=white,black title=brightcyan,black
+textbox=white,black listbox=white,black actsellistbox=black,cyan button=black,cyan
+compactbutton=white,black entry=white,black'
+
+H=$(( $(tput lines 2>/dev/null || echo 30) - 2 )); [ "$H" -gt 30 ] && H=30; [ "$H" -lt 12 ] && H=12
+W=$(( $(tput cols 2>/dev/null || echo 60) - 4 )); [ "$W" -gt 70 ] && W=70; [ "$W" -lt 40 ] && W=40
+L=$((H - 8))
+
+pause() { echo; read -r -p "Press Enter to go back " _; }
+msg() { whiptail --title "$1" --msgbox "$2" "$H" "$W"; }
+run() { clear; "$@"; pause; }
+
+wifi_connect() {
+	clear; echo "Scanning for WiFi networks..."
+	sudo nmcli dev wifi rescan >/dev/null 2>&1; sleep 3
+	local items=() s sig sec
+	while IFS=: read -r s sig sec; do
+		[ -n "$s" ] || continue
+		items+=("$s" "$(printf '%3s%%  %s' "$sig" "${sec:-open}")")
+	done < <(nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list | awk -F: '$1!="" && !seen[$1]++')
+	if [ ${#items[@]} -eq 0 ]; then msg "WiFi" "No networks found.\n\nTry 'Fix WiFi'."; return; fi
+	s=$(whiptail --title "Choose a WiFi network" --menu "" "$H" "$W" "$L" "${items[@]}" 3>&1 1>&2 2>&3) || return
+	local pass=""
+	sec=$(nmcli -t -f SSID,SECURITY dev wifi list | awk -F: -v s="$s" '$1==s{print $2; exit}')
+	if [ -n "$sec" ] && [ "$sec" != "--" ] && ! nmcli -t -f NAME con show | grep -qxF "$s"; then
+		pass=$(whiptail --title "$s" --passwordbox "WiFi password:" 10 "$W" 3>&1 1>&2 2>&3) || return
+	fi
+	clear; echo "Connecting to $s..."
+	sudo wifi connect "$s" "$pass"
+	pause
+}
+
+wifi_menu() {
+	while true; do
+		c=$(whiptail --title "WiFi" --menu "$(wifi status 2>/dev/null | head -3)" "$H" "$W" "$L" \
+			1 "Connect to a network" \
+			2 "Status" \
+			3 "Saved networks" \
+			4 "Forget a saved network" \
+			5 "Fix WiFi (reset driver)" \
+			6 "Hotspot ON (ssh in from a laptop)" \
+			7 "Hotspot OFF" \
+			8 "WiFi radio on" \
+			9 "WiFi radio off" \
+			3>&1 1>&2 2>&3) || return
+		case $c in
+		1) wifi_connect ;;
+		2) run wifi status ;;
+		3) run wifi saved ;;
+		4) mapfile -t saved < <(nmcli -t -f NAME,TYPE con show | awk -F: '$2=="802-11-wireless" && $1!="gemini-hotspot"{print $1}')
+		   [ ${#saved[@]} -gt 0 ] || { msg "WiFi" "No saved networks."; continue; }
+		   items=(); for n in "${saved[@]}"; do items+=("$n" ""); done
+		   n=$(whiptail --title "Forget network" --menu "" "$H" "$W" "$L" "${items[@]}" 3>&1 1>&2 2>&3) &&
+		   run wifi forget "$n" ;;
+		5) run wifi fix ;;
+		6) run wifi hotspot on ;;
+		7) run wifi hotspot off ;;
+		8) run wifi on ;;
+		9) run wifi off ;;
+		esac
+	done
+}
+
+claude_menu() {
+	export PATH="$HOME/.local/bin:$PATH"
+	local st="not installed"
+	command -v claude >/dev/null && st="installed: $(claude --version 2>/dev/null | head -1)"
+	c=$(whiptail --title "Claude Code" --menu "$st" "$H" "$W" "$L" \
+		1 "Start Claude Code (in tmux)" \
+		2 "Start Claude Code" \
+		3 "Install / update Claude Code" \
+		3>&1 1>&2 2>&3) || return
+	case $c in
+	1) clear; claude-tmux ;;
+	2) clear; claude; pause ;;
+	3) run install-claude ;;
+	esac
+}
+
+screen_menu() {
+	c=$(whiptail --title "Screen" --menu "$(bright)  $(screen-timeout 2>/dev/null)" "$H" "$W" "$L" \
+		1 "Brightness 10%" 2 "Brightness 30%" 3 "Brightness 60%" 4 "Brightness 100%" \
+		5 "Turn off after 1 minute" 6 "Turn off after 5 minutes" 7 "Never turn off" \
+		3>&1 1>&2 2>&3) || return
+	case $c in
+	1) bright 10 ;; 2) bright 30 ;; 3) bright 60 ;; 4) bright 100 ;;
+	5) sudo screen-timeout 60 ;; 6) sudo screen-timeout 300 ;; 7) sudo screen-timeout 0 ;;
+	esac >/dev/null
+}
+
+bt_menu() {
+	c=$(whiptail --title "Bluetooth" --menu "" "$H" "$W" "$L" \
+		1 "Turn on" 2 "Turn off" 3 "Pair a device (bluetoothctl)" 3>&1 1>&2 2>&3) || return
+	case $c in
+	1) run bluetoothctl power on ;;
+	2) run bluetoothctl power off ;;
+	3) clear; echo "Commands: scan on / devices / pair XX:XX.. / connect XX:XX.. / quit"; bluetoothctl ;;
+	esac
+}
+
+system_menu() {
+	c=$(whiptail --title "System" --menu "" "$H" "$W" "$L" \
+		1 "Update Ubuntu" \
+		2 "Change my password" \
+		3 "Disk and memory usage" \
+		4 "Reinstall device firmware (GPU/audio/modem)" \
+		5 "Set time zone" \
+		6 "Don't open this menu at login" \
+		7 "Open this menu at login" \
+		3>&1 1>&2 2>&3) || return
+	case $c in
+	1) run update ;;
+	2) run passwd ;;
+	3) run sh -c 'df -h /; echo; free -h' ;;
+	4) run sudo gemini-firmware-install --force ;;
+	5) clear; sudo dpkg-reconfigure tzdata; pause ;;
+	6) touch "$HOME/.no-auto-menu"; msg "Menu" "OK. Type 'menu' to open it." ;;
+	7) rm -f "$HOME/.no-auto-menu"; msg "Menu" "OK." ;;
+	esac
+}
+
+while true; do
+	ip=$(ip -4 -br addr | awk '$1!="lo" && $3!=""{printf "%s %s  ", $1, $3}')
+	bat=$(cat /sys/class/power_supply/*/capacity 2>/dev/null | head -1)
+	c=$(whiptail --title "Mi 5 - Ubuntu" --cancel-button "Exit" \
+		--menu "Battery: ${bat:-?}%   ${ip:-offline}" "$H" "$W" "$L" \
+		1 "WiFi" \
+		2 "Claude Code" \
+		3 "Phone status" \
+		4 "Screen" \
+		5 "Bluetooth" \
+		6 "System" \
+		7 "Easy commands (help)" \
+		8 "Command line" \
+		9 "Reboot" \
+		0 "Power off" \
+		3>&1 1>&2 2>&3) || { clear; echo "Type 'menu' to open the menu again."; exit 0; }
+	case $c in
+	1) wifi_menu ;;
+	2) claude_menu ;;
+	3) run gemini-status ;;
+	4) screen_menu ;;
+	5) bt_menu ;;
+	6) system_menu ;;
+	7) run phone-help ;;
+	8) clear; echo "Type 'menu' to come back."; exit 0 ;;
+	9) whiptail --yesno "Reboot now?" 8 30 && sudo systemctl reboot ;;
+	0) whiptail --yesno "Power off now?" 8 30 && sudo systemctl poweroff ;;
+	esac
+done
