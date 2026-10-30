@@ -184,6 +184,7 @@ systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadge
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \
 	systemd-firstboot.service hibernate.target hybrid-sleep.target \
 	suspend-then-hibernate.target >/dev/null
+in_root systemctl unmask sleep.target suspend.target >/dev/null 2>&1 || true   # masked by older builds
 case "${UI}" in
 console)
 	systemd_enable buffyboard.service gemini-powerkey.service
