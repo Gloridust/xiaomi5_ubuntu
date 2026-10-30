@@ -158,7 +158,8 @@ systemd_enable() { in_root systemctl enable "$@" >/dev/null 2>&1 || echo "     (
 systemd_enable gemini-firstboot.service gemini-firmware.service gemini-usb-gadget.service \
 	systemd-networkd.service NetworkManager.service \
 	systemd-resolved.service bluetooth.service rmtfs.service \
-	ModemManager.service gemini-wifi-watchdog.timer
+	ModemManager.service gemini-wifi-watchdog.timer \
+	gemini-rtc-offset.service gemini-rtc-offset-save.timer gemini-pcie-retrain.service
 in_root systemctl mask systemd-networkd-wait-online.service NetworkManager-wait-online.service \
 	systemd-firstboot.service sleep.target suspend.target hibernate.target \
 	hybrid-sleep.target suspend-then-hibernate.target >/dev/null

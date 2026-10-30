@@ -29,8 +29,8 @@ small server, for example to run **Claude Code**.
 | Display 1080×1920 | msm DRM + `panel-jdi-fhd-r63452` | ✅ tested on a Mi 5 |
 | Backlight | qcom-wled | ✅ upstream |
 | Touchscreen | Synaptics RMI4 (I²C) | ✅ tested on a Mi 5 |
-| **WiFi** 802.11ac | QCA6174 on PCIe, `ath10k_pci` + linux-firmware | ❌ PCIe link doesn't come up yet |
-| **Bluetooth** 4.2 | QCA6174 UART, `hci_uart` + linux-firmware | ✅ (MAC set by `gemini-bt-mac`) |
+| **WiFi** 802.11ac | QCA6174 on PCIe, `ath10k_pci` + linux-firmware | ✅ tested on a Mi 5 ⁴ |
+| **Bluetooth** 4.2 | QCA6174 UART, `hci_uart` + linux-firmware | ✅ tested on a Mi 5 (MAC from Android's persist) |
 | USB 2.0 device mode | dwc3 → **USB network + serial console** to a PC | ✅ tested on a Mi 5 ³ |
 | USB OTG host (keyboard, disks) | dwc3 + TUSB320L type-C + PMI8994 VBUS | ✅ |
 | Battery level, charging | PMI8994 fuel gauge + smbchg (msm8996-mainline) | ✅ fork patches |
@@ -41,7 +41,8 @@ small server, for example to run **Claude Code**.
 | Modem (LTE data, SMS) | q6v5-mss + rmtfs + ModemManager | ⚠️ needs device firmware ¹, experimental |
 | Vibrator, notification LED, button LEDs, IR blaster | drv2604, LPG, lp5562, pwm-ir-tx | ✅ upstream |
 | NFC | nxp-nci | ⚠️ driver only, untested |
-| Sensors (accel, gyro, light) | SLPI DSP | ❌ not supported |
+| Sensors: accel, gyro, compass, proximity, barometer | SLPI DSP, `qcom_sns_reg` + `qcom_smgr` IIO | ✅ tested on a Mi 5, needs device firmware ¹ (`gemini-sensors`) |
+| Clock (keeps time while off) | pm8xxx RTC + saved offset (`gemini-rtc-offset`) | ✅ tested on a Mi 5 |
 | Cameras, fingerprint, suspend-to-RAM | – | ❌ not supported (phone stays awake; screen turns off) |
 
 ¹ The GPU zap shader and DSP/modem firmware are signed by Xiaomi and cannot
@@ -53,10 +54,12 @@ time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 without it locks up the phone, so cpufreq is off (`cpufreq.off=1`) and the CPUs
 stay at the bootloader's 1.04 GHz.
 ³ The USB PHY sometimes fails to start at boot; `gemini-usb-gadget` retries.
+⁴ The PCIe link to the WiFi chip sometimes doesn't train at boot;
+`gemini-pcie-retrain` brings it back.
 
 > **Status:** boots to a working Ubuntu 26.04 login on a real Mi 5 (display,
-> touch keyboard, USB network + SSH, storage, battery charging tested).
-> Not working yet: WiFi. Other rows marked "upstream" come from the upstream
+> touch keyboard, USB network + SSH, storage, battery charging, WiFi,
+> Bluetooth, sensors and the clock tested). Other rows marked "upstream" come from the upstream
 > kernel / postmarketOS work on the same hardware and are not tested here yet.
 > The build also boots in QEMU (`tests/qemu-boot.sh`).
 

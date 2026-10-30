@@ -41,14 +41,21 @@ and `board-2.bin` come from Ubuntu's `linux-firmware-qualcomm-wireless`.
 Managed by NetworkManager (`nmtui`, `nmcli`). Power saving is disabled in
 `/etc/NetworkManager/conf.d/10-gemini.conf` because it makes ath10k laggy.
 
-Check: `iw dev`, `dmesg | grep ath10k`.
+On some boots the PCIe link to the chip doesn't train in time
+(`qcom-pcie 600000.pcie: Phy link never came up`) and the chip is missing.
+`gemini-pcie-retrain.service` then retrains the link and rescans the bus, and
+the WiFi watchdog does the same if it ever finds no WiFi device.
+
+Check: `iw dev`, `dmesg | grep ath10k`, `lspci`.
 
 ## Bluetooth
 
 Same QCA6174 chip, over UART (`hci_uart` with the QCA protocol). Firmware
 `qca/rampatch_00130302.bin` + `qca/nvm_00130302.bin` from linux-firmware.
 The chip has no MAC address of its own under Linux, so `gemini-bt-mac@hci0`
-sets a stable one derived from the phone's serial number.
+gives it the phone's real one from Android's `persist:/wlan_bt/bt.mac`
+(cached in `/var/lib/gemini/bt-address`), or a stable one derived from the
+serial number if that can't be read.
 
 Check: `bluetoothctl show`, `bluetoothctl scan on`.
 
@@ -95,11 +102,37 @@ ModemManager over QRTR. Experimental: `mmcli -L`, `mmcli -m 0`.
 To keep it off: uncomment `blacklist qcom_q6v5_mss` in
 `/etc/modprobe.d/gemini.conf` and reboot.
 
+## Sensors
+
+Accelerometer, gyroscope, magnetometer, proximity and barometer sit behind the
+sensor DSP (SLPI). It needs `slpi.mbn` and the sensor registry `sns.reg`, both
+copied from Android on first boot (see [FIRMWARE.md](FIRMWARE.md)); the kernel
+serves the registry to the DSP (`qcom_sns_reg`) and exposes the sensors as IIO
+devices (`qcom_smgr`, `/sys/bus/iio/devices/`). They only deliver data through
+the IIO buffer, so `cat in_*_raw` won't work:
+
+```bash
+sudo gemini-sensors        # one reading of every sensor (-w: keep printing)
+```
+
+The phosh UI installs `iio-sensor-proxy` for screen rotation.
+
+## Clock
+
+The PMIC real-time clock keeps running while the phone is off, but Linux can't
+set it (Android keeps an offset in its own files instead). So
+`gemini-rtc-offset.service` does the same: at boot the time is RTC + the offset
+saved in `/var/lib/gemini/rtc-offset`, and the offset is saved again at
+shutdown and every hour. NTP (`chrony`) corrects it once there is network. If
+the battery ran completely flat the RTC restarts from zero; the clock then
+continues from the last saved time until NTP fixes it. Set it by hand with
+`sudo date -s '2026-10-31 12:00'` (saved within the hour or at shutdown).
+
 ## Not supported
 
 - **Suspend**: MSM8996 deep sleep isn't supported upstream. The phone stays
   awake (good for a server); the screen turns off. Sleep targets are masked.
-- **Sensors** (SLPI DSP needs `sns.reg` + hexagonrpcd setup), **cameras**,
-  **fingerprint reader**.
+- **Cameras**, **fingerprint reader**, ambient light sensor (the DSP only
+  reports proximity on this channel).
 - Expect roughly 6–10 hours of battery with the screen off and WiFi on;
   keep it on a charger for 24/7 server use.

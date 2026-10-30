@@ -1,6 +1,5 @@
 [Unit]
-Description=Copy Mi 5 GPU/DSP/modem firmware from the Android partitions
-ConditionPathExists=!/var/lib/gemini/firmware-installed
+Description=Copy missing Mi 5 GPU/DSP/modem firmware from the Android partitions
 After=local-fs.target systemd-udev-settle.service
 Before=rmtfs.service
 

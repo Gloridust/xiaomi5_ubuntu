@@ -1,0 +1,126 @@
+From: Ethan Zou <gloridust@gmail.com>
+Date: Sat, 31 Oct 2026 01:40:00 +0800
+Subject: [PATCH] soc: qcom: sns_reg: recover from a failed probe and start
+ the server when the DSP is already up
+
+Three problems seen on a Xiaomi Mi 5 (MSM8996), where the sensor
+registry file is copied from Android on first boot, i.e. after the SLPI
+has already started once:
+
+- When qcom_sns_reg_probe_once() failed (registry file missing), the
+  half-initialised global data was kept. Every later probe then only
+  bumped its refcount and returned 0, so the device looked bound but the
+  QMI registry service (271) never appeared and the sensor DSP never
+  came up. Free it so a later probe can start over.
+
+- The server was only started on the AFTER_POWERUP notification. When
+  the driver is probed while the DSP is already running that
+  notification is long gone. Start it right away as well: the QRTR name
+  service tells the remote about it whenever it comes up. Also set up
+  the QMI handle before registering the notifier, so a notification
+  can't reach an uninitialised handle.
+
+- The first successful probe never set drvdata, so remove() of that
+  device did nothing; remove() also freed the data with the power-up
+  work possibly still queued. Set drvdata, and cancel the work (outside
+  the mutex it takes) before freeing.
+
+Also don't fail with -ENOMEM when the root node has no compatible.
+---
+--- a/drivers/soc/qcom/qcom_sns_reg.c
++++ b/drivers/soc/qcom/qcom_sns_reg.c
+@@ -382,7 +382,8 @@ static int qcom_sns_reg_qmi_service_start(void)
+ 
+ 	mutex_lock(&qcom_sns_reg_mutex);
+ 
+-	if (__qcom_sns_reg_data->qmi_svc_started)
++	/* the driver may have been removed while this work was queued */
++	if (!__qcom_sns_reg_data || __qcom_sns_reg_data->qmi_svc_started)
+ 		goto out;
+ 
+ 	ret = qmi_add_server(&__qcom_sns_reg_data->svc_handle,
+@@ -416,8 +417,11 @@ static int qcom_sns_reg_load_firmware(struct auxiliary_device *auxdev)
+ 		fwname[1] = NULL;
+ 	}
+ 
+-	if (!fwname[0] || !fwname[1])
++	if (!fwname[0] || (ret == 0 && !fwname[1])) {
++		kfree(fwname[1]);
++		kfree(fwname[0]);
+ 		return -ENOMEM;
++	}
+ 
+ 	for (i = 0; i < ARRAY_SIZE(fwname); i++) {
+ 		if (!fwname[i])
+@@ -493,21 +497,31 @@ static int qcom_sns_reg_probe_once(struct auxiliary_device *auxdev)
+ 
+ 	INIT_WORK(&__qcom_sns_reg_data->work, qcom_sns_reg_ssr_notifier_work);
+ 
++	ret = qmi_handle_init(&__qcom_sns_reg_data->svc_handle,
++		SNS_REG_GROUP_RESP_MAX_LEN, NULL, qcom_sns_reg_msg_handlers);
++	if (ret) {
++		dev_err(&auxdev->dev, "failed to init QMI handle %d\n", ret);
++		goto err_cleanup;
++	}
++
+ 	__qcom_sns_reg_data->ssr_nb.notifier_call = qcom_sns_reg_ssr_notify_handler;
+ 	cookie = qcom_register_ssr_notifier(target_ssr_name, &__qcom_sns_reg_data->ssr_nb);
+ 	if (IS_ERR(cookie)) {
+ 		ret = PTR_ERR(cookie);
+ 		dev_err(&auxdev->dev, "failed to register remoteproc status notifier: %d\n", ret);
++		qmi_handle_release(&__qcom_sns_reg_data->svc_handle);
+ 		goto err_cleanup;
+ 	}
+ 	__qcom_sns_reg_data->ssr_cookie = cookie;
+ 
+-	ret = qmi_handle_init(&__qcom_sns_reg_data->svc_handle,
+-		SNS_REG_GROUP_RESP_MAX_LEN, NULL, qcom_sns_reg_msg_handlers);
+-	if (ret) {
+-		dev_err(&auxdev->dev, "failed to init QMI handle %d\n", ret);
+-		goto err_cleanup;
+-	}
++	/*
++	 * The remote processor may already be running (the driver can be
++	 * probed again after the registry file shows up), in which case the
++	 * AFTER_POWERUP notification has come and gone. Announcing the server
++	 * early is harmless: the QRTR name service tells the remote about it
++	 * whenever it comes up.
++	 */
++	schedule_work(&__qcom_sns_reg_data->work);
+ 
+ 	return 0;
+ 
+@@ -545,6 +559,13 @@ static int qcom_sns_reg_probe(struct auxiliary_device *auxdev,
+ 			refcount_set(&__qcom_sns_reg_data->refcnt, 1);
+ 
+ 			ret = qcom_sns_reg_probe_once(auxdev);
++			if (ret) {
++				/* let a later probe (e.g. once the firmware exists) try again */
++				__qcom_sns_reg_data = NULL;
++				kfree(data);
++			} else {
++				auxiliary_set_drvdata(auxdev, data);
++			}
+ 		}
+ 	} else {
+ 		/* For 2nd, 3rd,.. init just increase reference count */
+@@ -570,14 +591,17 @@ static void qcom_sns_reg_remove(struct auxiliary_device *auxdev)
+ 
+ 		qcom_unregister_ssr_notifier(data->ssr_cookie, &data->ssr_nb);
+ 
++		mutex_unlock(&qcom_sns_reg_mutex);
++
++		/* the work takes the mutex, so wait for it only after unlocking */
++		cancel_work_sync(&data->work);
++
+ 		/* The server is removed automatically */
+ 		qmi_handle_release(&data->svc_handle);
+ 
+ 		release_firmware(data->fw);
+ 
+ 		kfree(data);
+-
+-		mutex_unlock(&qcom_sns_reg_mutex);
+ 	}
+ }
+ 

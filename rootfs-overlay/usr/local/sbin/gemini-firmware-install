@@ -9,6 +9,10 @@ Mainline Linux expects these files in /lib/firmware/qcom/msm8996/gemini/:
     mba.mbn       modem boot authenticator
     modem.mbn     modem                             -> LTE, SMS, calls
 
+and the sensor registry (calibration and sensor list for the sensor DSP) in
+/lib/firmware/qcom/sensors/sns.reg-xiaomi,gemini, copied from the Android
+persist partition.
+
 They are signed by Xiaomi, so they cannot ship in this image. The stock
 Android partitions (modem, system, vendor) are untouched by the Ubuntu
 install, so this tool copies the files from there. Android stores most of
@@ -37,7 +41,9 @@ WANTED = {
     "a530_zap.mbn": ["a530_zap"],
     "venus.mbn": ["venus"],
     "adsp.mbn": ["adsp"],
-    "slpi.mbn": ["slpi", "slpi_v1", "slpi_v2"],
+    # The stock modem partition carries the sensor DSP firmware of several
+    # Xiaomi phones (slpi_a1/a4/a7); the stock gemini device tree uses slpi_a1.
+    "slpi.mbn": ["slpi", "slpi_a1", "slpi_v1", "slpi_v2"],
     "mba.mbn": ["mba"],
     "modem.mbn": ["modem"],
 }
@@ -46,7 +52,11 @@ PARTITIONS = [  # (partlabel, fstype)
     ("modem", "vfat"),
     ("system", "ext4"),
     ("vendor", "ext4"),
+    ("persist", "ext4"),  # sensors/sns.reg
 ]
+
+# Relative to --dest (.../qcom/msm8996/gemini): .../qcom/sensors/
+SNS_REG = os.path.join("..", "..", "sensors", "sns.reg-xiaomi,gemini")
 
 
 def log(msg):
@@ -175,6 +185,22 @@ def start_remoteprocs():
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def probe_sns_reg():
+    """The sensor registry driver gives up (-110) when its file is missing at
+    boot. Probe it again now that the file is there."""
+    base = "/sys/bus/auxiliary/devices"
+    if not os.path.isdir(base):
+        return
+    for dev in os.listdir(base):
+        if "sns-reg" in dev and not os.path.exists(os.path.join(base, dev, "driver")):
+            try:
+                with open("/sys/bus/auxiliary/drivers_probe", "w") as f:
+                    f.write(dev)
+                log("probed %s" % dev)
+            except OSError as e:
+                log("could not probe %s: %s" % (dev, e))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -182,9 +208,16 @@ def main():
                     help="directories containing the firmware files")
     ap.add_argument("--dest", default=DEST_DEFAULT)
     ap.add_argument("--auto", action="store_true",
-                    help="first-boot mode: write a stamp and start the DSPs")
+                    help="boot mode: fill in missing files, write a stamp and start the DSPs")
     ap.add_argument("--force", action="store_true", help="overwrite existing files")
     args = ap.parse_args()
+
+    targets = dict((t, os.path.join(args.dest, t)) for t in WANTED)
+    targets["sns.reg"] = os.path.normpath(os.path.join(args.dest, SNS_REG))
+    todo = [t for t, dst in targets.items() if args.force or not os.path.exists(dst)]
+    if not todo:
+        log("all firmware already present")
+        return 0
 
     tmp = tempfile.mkdtemp(prefix="gemini-fw-")
     mounted = []
@@ -202,21 +235,26 @@ def main():
             return 0 if args.auto else 1
         indexes = [index_dir(r) for r in roots]
 
-        os.makedirs(args.dest, exist_ok=True)
         installed, missing = [], []
-        for target, bases in WANTED.items():
-            dst = os.path.join(args.dest, target)
-            if os.path.exists(dst) and not args.force:
-                log("%s already present" % target)
-                continue
+        for target in todo:
+            dst = targets[target]
             data = src = None
-            for b in bases:
-                data, src = find_and_build(b, indexes)
-                if data:
-                    break
+            if target == "sns.reg":
+                for idx in indexes:
+                    src = idx.get("sns.reg")
+                    if src:
+                        with open(src, "rb") as f:
+                            data = f.read()
+                        break
+            else:
+                for b in WANTED[target]:
+                    data, src = find_and_build(b, indexes)
+                    if data:
+                        break
             if not data:
                 missing.append(target)
                 continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst + ".tmp", "wb") as f:
                 f.write(data)
             os.replace(dst + ".tmp", dst)
@@ -231,6 +269,7 @@ def main():
                 f.write("installed: %s\nmissing: %s\n" % (" ".join(installed), " ".join(missing)))
             if installed:
                 start_remoteprocs()
+                probe_sns_reg()
         return 0
     finally:
         for m in mounted:
