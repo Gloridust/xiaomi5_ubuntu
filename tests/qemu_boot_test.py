@@ -89,6 +89,10 @@ try:
         # Claude Code from Anthropic's official installer, on this image
         check("install-claude 2>&1 | tail -4", r"Done\. Start Claude Code", timeout=1500)
         check("~/.local/bin/claude --version", r"\d+\.\d+\.\d+", timeout=600)
+        # pi from the pinned lockfile, Node.js from the Ubuntu archive
+        check("echo %s | sudo -S -p '' apt-get install -y -q nodejs npm >/dev/null 2>&1; echo rc=$?" % PW, r"rc=0", timeout=1500)
+        check("install-pi --no-key 2>&1 | tail -4", r"Done: pi \d", timeout=1500)
+        check("~/.pi/agent/bin/pi --version", r"\d+\.\d+\.\d+", timeout=600)
     send("echo %s | sudo -S -p '' poweroff" % PW)
     expect("Power down|reboot: ", 600)
 except TimeoutError as e:

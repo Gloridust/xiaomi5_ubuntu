@@ -1,0 +1,6 @@
+#!/bin/bash
+# Run pi inside tmux: if your SSH session drops, run pi-tmux again to get
+# back to the same session. Detach: Ctrl-b then d.
+export PATH="$HOME/.pi/agent/bin:$PATH" NODE_COMPILE_CACHE="$HOME/.cache/node-compile"
+command -v pi >/dev/null || { echo "pi is not installed yet. Run:  install-pi"; exit 1; }
+exec tmux new-session -A -s pi pi "$@"

@@ -39,7 +39,7 @@ jobs:
             rootfs-overlay/usr/local/sbin/gemini-firstboot \
             rootfs-overlay/usr/local/sbin/gemini-bt-mac \
             rootfs-overlay/usr/local/sbin/gemini-wifi-watchdog \
-            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,wifi,menu,install-claude,claude-tmux,bright,screen-timeout,phone-help,update} \
+            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,wifi,menu,install-claude,claude-tmux,install-pi,pi-tmux,bright,screen-timeout,phone-help,update} \
             rootfs-overlay/etc/profile.d/zz-gemini-menu.sh \
             rootfs-overlay/etc/update-motd.d/60-gemini
           shellcheck -S warning -s sh twrp/update-binary
@@ -125,7 +125,7 @@ jobs:
                (if the zip is on internal storage, the installer copies it to RAM first)
             2. TWRP → Install → the zip → Reboot System
             3. Log in `ubuntu` / `ubuntu`, choose a new password. The menu opens: WiFi → Connect.
-            4. `install-claude`, then `claude`
+            4. `install-claude`, then `claude` (or `install-pi`, then `pi` with a DeepSeek key)
 
             **Or with fastboot:** `fastboot flash boot boot.img` and `fastboot flash userdata rootfs.sparse.img` (unpack the .xz first).
 

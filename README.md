@@ -6,7 +6,7 @@ support and a **touch on-screen keyboard**, so the phone works on its own as a
 small server, for example to run **Claude Code**.
 
 - Install from **TWRP** with one zip (or with fastboot)
-- A **text menu** (`menu`) and easy commands (`wifi`, `status`, `install-claude`)
+- A **text menu** (`menu`) and easy commands (`wifi`, `status`, `install-claude`, `install-pi`)
 - WiFi that **heals itself**: reconnects, resets the driver, and finally opens
   a rescue hotspot so you can always get back in
 - Volume keys and Home button navigate the menu
@@ -71,7 +71,7 @@ stay at the bootloader's 1.04 GHz.
    (or TWRP → Install → the zip). This **erases Android's user data**.
 3. Reboot. Log in **ubuntu / ubuntu** and choose a new password.
 4. The menu opens: **WiFi → Connect to a network**.
-5. `install-claude`, then `claude`.
+5. `install-claude`, then `claude`. Or `install-pi` (DeepSeek), then `pi`.
 
 Easy commands: [docs/COMMANDS.md](docs/COMMANDS.md). From a PC over USB:
 `ssh ubuntu@172.16.42.1`.
@@ -116,7 +116,7 @@ tools/mkbootimg/            AOSP mkbootimg (Ubuntu 24.04's package is broken)
 | `gemini-powerkey` | power key toggles the screen; auto screen-off after 2 min |
 | `gemini-bt-mac` | gives the Bluetooth controller a stable MAC address |
 | `gemini-status` / `status` | one-screen hardware overview |
-| `menu`, `wifi`, `install-claude`, `phone-help` | text menu and easy commands ([docs/COMMANDS.md](docs/COMMANDS.md)) |
+| `menu`, `wifi`, `install-claude`, `install-pi`, `phone-help` | text menu and easy commands ([docs/COMMANDS.md](docs/COMMANDS.md)) |
 | `gemini-wifi-watchdog.timer` | reconnects WiFi, resets the driver, starts a rescue hotspot |
 | `gemini-firstboot` | grows the root filesystem, creates SSH host keys |
 

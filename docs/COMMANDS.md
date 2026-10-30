@@ -15,6 +15,8 @@ Type `phone-help` on the phone to see this list.
 | `status` | battery, charger, temperatures, WiFi, IP, DSPs, firmware |
 | `install-claude` | install / update Claude Code |
 | `claude` / `claude-tmux` | start Claude Code (tmux version survives SSH drops) |
+| `install-pi` | install the pi coding agent and enter a DeepSeek API key (run again to change the key) |
+| `pi` / `pi-tmux` | start pi (tmux version survives SSH drops); `pi update` updates it |
 | `bright 40` | screen brightness 40 % |
 | `screen-timeout 60` | screen off after 60 s without input (`0` = never) |
 | `update` | update Ubuntu and the kernel |

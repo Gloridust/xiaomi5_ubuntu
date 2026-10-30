@@ -1,0 +1,125 @@
+#!/bin/bash
+# Install the pi coding agent (https://pi.dev) and set it up for DeepSeek.
+#   install-pi              install, then ask for a DeepSeek API key
+#   install-pi --no-key     install only
+#   pi                      start it   (pi-tmux: keeps running if SSH drops)
+#   pi update               update pi later
+#
+# Same layout as pi's own installer (~/.pi/agent/install/releases/<version>),
+# so `pi update` works, but Node.js comes from Ubuntu and the packages are
+# installed with `npm ci` from the lockfile in /usr/local/share/gemini/pi
+# (exact versions and checksums) instead of running a downloaded script.
+# To move to a newer pi: copy package.json and package-lock.json from a
+# release directory of a pi install on a PC.
+set -uo pipefail
+SRC=/usr/local/share/gemini/pi
+AGENT="$HOME/.pi/agent"
+ask_key=1
+[ "${1:-}" = "--no-key" ] && ask_key=0
+
+if [ "$(id -u)" -eq 0 ]; then
+	echo "Run this as your normal user, without sudo:  install-pi"
+	exit 1
+fi
+
+node_ok() {
+	command -v node >/dev/null && command -v npm >/dev/null &&
+		node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=19)?0:1)'
+}
+if ! node_ok; then
+	echo "Installing Node.js from Ubuntu (asks for your password)..."
+	sudo apt-get install -y nodejs npm || { echo "Could not install Node.js. Online? Try:  wifi status"; exit 1; }
+	node_ok || { echo "pi needs Node.js 22.19 or newer, Ubuntu has $(node -v)."; exit 1; }
+fi
+
+ver=$(node -p 'require(process.argv[1]).dependencies["@earendil-works/pi-coding-agent"]' "$SRC/package.json") || exit 1
+rel="$AGENT/install/releases/$ver"
+if [ -x "$rel/node_modules/.bin/pi" ]; then
+	echo "pi $ver is already installed."
+else
+	echo "Installing pi $ver (about 120 packages, takes a minute or two)..."
+	tmp="$AGENT/install/staging/install-$$"
+	rm -rf "$tmp"; mkdir -p "$tmp" "$AGENT/install/releases"
+	cp "$SRC/package.json" "$SRC/package-lock.json" "$tmp/"
+	if ! (cd "$tmp" && npm ci --omit=dev --no-audit --no-fund --loglevel=error); then
+		rm -rf "$tmp"
+		if ! curl -sS -m 15 -o /dev/null https://registry.npmjs.org 2>/dev/null; then
+			echo "No internet connection. Connect first with:  wifi"
+		else
+			echo "npm failed (see above). Try again later."
+		fi
+		exit 1
+	fi
+	rm -rf "$rel"; mv "$tmp" "$rel"
+fi
+
+# pi's managed-install marker and launcher: pi update installs new releases
+# next to this one and switches current-version.
+echo "$ver" > "$AGENT/install/current-version"
+cat > "$AGENT/install/managed-install.json" <<EOF
+{"kind": "pi-managed-install", "schemaVersion": 1, "layout": "releases-v1",
+ "entrypoint": {"type": "script", "path": "$AGENT/bin/pi"}}
+EOF
+mkdir -p "$AGENT/bin"
+cat > "$AGENT/bin/pi" <<'EOF'
+#!/bin/sh
+# Starts the pi release named in ../install/current-version (written by install-pi).
+agent=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+IFS= read -r ver < "$agent/install/current-version" || { echo "pi: no current-version" >&2; exit 1; }
+PI_MANAGED_INSTALL_ROOT=$agent/install
+export PI_MANAGED_INSTALL_ROOT
+exec "$agent/install/releases/$ver/node_modules/.bin/pi" "$@"
+EOF
+chmod 755 "$AGENT/bin/pi"
+chmod 700 "$HOME/.pi"
+
+# PATH, and Node's compile cache: pi starts in ~4 s instead of ~12 s on this phone
+# shellcheck disable=SC2016
+grep -qs '.pi/agent/bin' "$HOME/.bashrc" || echo 'export PATH="$HOME/.pi/agent/bin:$PATH"' >> "$HOME/.bashrc"
+# shellcheck disable=SC2016
+grep -qs 'NODE_COMPILE_CACHE' "$HOME/.bashrc" || echo 'export NODE_COMPILE_CACHE="$HOME/.cache/node-compile"' >> "$HOME/.bashrc"
+export PATH="$AGENT/bin:$PATH" NODE_COMPILE_CACHE="$HOME/.cache/node-compile"
+
+# DeepSeek key -> ~/.pi/agent/auth.json (only you can read it); DeepSeek as default
+key="${DEEPSEEK_API_KEY:-}"
+if [ -z "$key" ] && [ "$ask_key" = 1 ] && [ -t 0 ] &&
+   ! python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("deepseek") else 1)' "$AGENT/auth.json" 2>/dev/null; then
+	echo
+	echo "DeepSeek API key (from https://platform.deepseek.com/api_keys)."
+	read -r -s -p "Paste it and press Enter, or just Enter to skip: " key; echo
+fi
+python3 -I - "$AGENT" "$key" <<'EOF'
+import json, os, sys
+agent, key = sys.argv[1], sys.argv[2].strip()
+
+def load(name):
+    try:
+        with open(os.path.join(agent, name)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+def save(name, data, mode):
+    path = os.path.join(agent, name)
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(path + ".tmp", path)
+
+if key:
+    auth = load("auth.json")
+    auth["deepseek"] = {"type": "api_key", "key": key}
+    save("auth.json", auth, 0o600)
+    print("DeepSeek key saved.")
+settings = load("settings.json")
+if "deepseek" in load("auth.json") and "defaultProvider" not in settings:
+    settings.update(defaultProvider="deepseek", defaultModel="deepseek-flash")
+    save("settings.json", settings, 0o644)
+EOF
+
+echo
+pi --version >/dev/null || { echo "pi did not start."; exit 1; }
+echo "Done: pi $ver. Start it with:   pi"
+echo "Inside tmux (survives SSH disconnects):   pi-tmux"
+python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("deepseek") else 1)' "$AGENT/auth.json" 2>/dev/null ||
+	echo "No API key yet: run install-pi again to add a DeepSeek key, or use /login inside pi."

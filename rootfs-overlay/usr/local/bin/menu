@@ -65,19 +65,28 @@ wifi_menu() {
 	done
 }
 
-claude_menu() {
-	export PATH="$HOME/.local/bin:$PATH"
-	local st="not installed"
-	command -v claude >/dev/null && st="installed: $(claude --version 2>/dev/null | head -1)"
-	c=$(whiptail --title "Claude Code" --menu "$st" "$H" "$W" "$L" \
+agents_menu() {
+	export PATH="$HOME/.local/bin:$HOME/.pi/agent/bin:$PATH" NODE_COMPILE_CACHE="$HOME/.cache/node-compile"
+	local cs="not installed" ps="not installed"
+	command -v claude >/dev/null && cs="$(claude --version 2>/dev/null | head -1)"
+	[ -x "$HOME/.pi/agent/bin/pi" ] && ps="$(cat "$HOME/.pi/agent/install/current-version" 2>/dev/null)"
+	c=$(whiptail --title "AI agents" --menu "Claude Code: $cs\npi: $ps" "$H" "$W" "$L" \
 		1 "Start Claude Code (in tmux)" \
 		2 "Start Claude Code" \
 		3 "Install / update Claude Code" \
+		4 "Start pi (in tmux)" \
+		5 "Start pi" \
+		6 "Install pi / set DeepSeek key" \
+		7 "Update pi" \
 		3>&1 1>&2 2>&3) || return
 	case $c in
 	1) clear; claude-tmux ;;
 	2) clear; claude; pause ;;
 	3) run install-claude ;;
+	4) clear; pi-tmux ;;
+	5) clear; pi; pause ;;
+	6) run install-pi ;;
+	7) run pi update ;;
 	esac
 }
 
@@ -129,7 +138,7 @@ while true; do
 	c=$(whiptail --title "Mi 5 - Ubuntu" --cancel-button "Exit" \
 		--menu "Battery: ${bat:-?}%   ${ip:-offline}" "$H" "$W" "$L" \
 		1 "WiFi" \
-		2 "Claude Code" \
+		2 "AI agents (Claude Code, pi)" \
 		3 "Phone status" \
 		4 "Screen" \
 		5 "Bluetooth" \
@@ -141,7 +150,7 @@ while true; do
 		3>&1 1>&2 2>&3) || { clear; echo "Type 'menu' to open the menu again."; exit 0; }
 	case $c in
 	1) wifi_menu ;;
-	2) claude_menu ;;
+	2) agents_menu ;;
 	3) run gemini-status ;;
 	4) screen_menu ;;
 	5) bt_menu ;;

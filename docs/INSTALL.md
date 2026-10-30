@@ -138,6 +138,21 @@ Or from the menu: *Claude Code*. Log in with your Claude account when it asks.
 The phone has 3 GB RAM plus compressed swap; Claude Code runs fine in the text
 console or over SSH.
 
+## 5c. pi agent (DeepSeek)
+
+```bash
+install-pi          # installs Node.js from Ubuntu and pi, then asks for a DeepSeek API key
+pi                  # start it (DeepSeek is the default model)
+pi-tmux             # same, but keeps running if your SSH connection drops
+pi update           # update pi later
+```
+
+Or from the menu: *AI agents*. Get a key at https://platform.deepseek.com/api_keys;
+it is stored in `~/.pi/agent/auth.json`, readable only by you. `install-pi` does
+not run a downloaded script: it installs the exact package versions pinned in
+`/usr/local/share/gemini/pi/package-lock.json` with `npm ci`. The first start
+takes about 12 s while Node compiles pi, later starts about 4 s.
+
 ## 6. Use it from a PC (USB)
 
 Connect the phone to a PC with a USB cable. The phone appears as a USB network

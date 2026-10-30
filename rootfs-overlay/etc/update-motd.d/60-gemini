@@ -2,6 +2,7 @@
 echo
 echo " Xiaomi Mi 5 running Ubuntu.   menu = all settings   phone-help = easy commands"
 echo " WiFi: wifi    Status: status    Claude Code: install-claude, then claude"
+echo " pi agent (DeepSeek): install-pi, then pi"
 if [ ! -s /var/lib/gemini/firmware-installed ] || grep -q 'missing: .\+' /var/lib/gemini/firmware-installed 2>/dev/null; then
 	echo " Some device firmware is missing - see: sudo gemini-firmware-install"
 fi
