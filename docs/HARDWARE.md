@@ -100,6 +100,14 @@ PMI8994 fuel gauge (`qcom_fg`) and charger (`qcom-smbchg`), from the
 msm8996-mainline kernel. `upower -d`, `gemini-status`, or
 `cat /sys/class/power_supply/*/capacity`.
 
+`qcom-battery`'s `current_now` is positive while discharging. From a PC port
+(`usb_type` `[SDP]`) the charger input stays at 500 mA; measured on a Mi 5
+with sway, screen on and some CPU load, that loses ~0.5 A from the battery.
+At 900 mA (`USB_PC_CURRENT=900`, the charger's USB 3.0 setting, applied by
+`gemini-usb-current` from udev on every charger change) the same phone
+charged at ~350 mA with the screen off. Wall chargers (DCP/CDP) get their
+limit from the charger's own AICL.
+
 ## Audio
 
 WCD9335 codec behind the ADSP (QDSP6, APR). Needs `adsp.mbn` (installed from

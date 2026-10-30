@@ -33,6 +33,11 @@ SCREEN_TIMEOUT=120
 # Volume up/down and Home button act as arrow up/down and Enter
 KEY_REMAP=yes
 
+# Charging from a PC's USB port: 500 (mA, USB 2.0) or 900 (USB 3.0 ports only;
+# a USB 2.0 port may switch off). At 500 the phone can still discharge while
+# plugged in. Takes effect on the next plug-in, or: sudo gemini-usb-current
+USB_PC_CURRENT=500
+
 # No WiFi for HOTSPOT_AFTER checks (2 min each) -> start a rescue hotspot,
 # so you can join it from a laptop and ssh in. The password is created on
 # first boot (HOTSPOT_PASSWORD below) and shown by:  wifi status

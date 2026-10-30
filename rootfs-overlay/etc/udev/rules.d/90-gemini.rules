@@ -11,6 +11,9 @@ SUBSYSTEM=="udc", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gemini-usb
 # Bluetooth controller needs a MAC address
 SUBSYSTEM=="bluetooth", ACTION=="add", KERNEL=="hci[0-9]*", ENV{DEVTYPE}=="host", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gemini-bt-mac@%k.service"
 
+# Charging from a PC: input current limit from USB_PC_CURRENT in /etc/default/gemini
+SUBSYSTEM=="power_supply", KERNEL=="qcom-smbchg-usb", ACTION=="add|change", RUN+="/usr/local/sbin/gemini-usb-current /sys%p"
+
 # Let the "video" group set the screen brightness without sudo
 SUBSYSTEM=="backlight", ACTION=="add", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
 

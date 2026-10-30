@@ -57,5 +57,10 @@ Alt keys and a symbols layer; use the volume keys as arrow up/down.
 ## Settings file
 
 `/etc/default/gemini`: screen timeout, button remapping, rescue hotspot
-(`AUTO_HOTSPOT`, `HOTSPOT_SSID`, `HOTSPOT_PASSWORD`, `HOTSPOT_AFTER`), kernel
-command line.
+(`AUTO_HOTSPOT`, `HOTSPOT_SSID`, `HOTSPOT_PASSWORD`, `HOTSPOT_AFTER`), charging
+from a PC (`USB_PC_CURRENT`), kernel command line.
+
+**Charging from a PC loses charge?** A PC's USB port gives 500 mA, less than the
+phone uses with the screen on. On a USB 3.0 port (usually blue) set
+`USB_PC_CURRENT=900` in `/etc/default/gemini`, then `sudo gemini-usb-current`
+(or replug). Not on USB 2.0 ports: they may switch off. A wall charger is better.
