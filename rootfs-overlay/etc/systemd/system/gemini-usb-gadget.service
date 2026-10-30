@@ -1,7 +1,6 @@
 [Unit]
 Description=Mi 5 USB gadget (network + serial console)
 After=sys-kernel-config.mount
-Before=systemd-networkd.service
 
 [Service]
 # Not RemainAfterExit: udev starts this again whenever the USB device

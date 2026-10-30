@@ -23,13 +23,13 @@ modprobe libcomposite
 mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
 [ -e "$G/UDC" ] && [ -n "$(cat "$G/UDC")" ] && exit 0   # already up
 
-udc=""
-for _ in $(seq 1 30); do
-	udc=$(ls /sys/class/udc 2>/dev/null | head -n1 || true)
-	[ -n "$udc" ] && break
-	sleep 1
-done
-[ -n "$udc" ] || { echo "no USB device controller found" >&2; exit 1; }
+udc=$(ls /sys/class/udc 2>/dev/null | head -n1 || true)
+if [ -z "$udc" ]; then
+	# Controller not there yet (still probing, or in OTG host mode). udev
+	# starts this service again when it appears (90-gemini.rules).
+	echo "no USB device controller yet, will retry when it appears"
+	exit 0
+fi
 
 serial=$(sed -n 's/.*androidboot.serialno=\([^ ]*\).*/\1/p' /proc/cmdline)
 [ -n "$serial" ] || serial=$(cut -c1-16 /etc/machine-id)

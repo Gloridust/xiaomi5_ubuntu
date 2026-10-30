@@ -28,7 +28,8 @@ fi
 
 mkdir -p "${KERNEL_BUILD}"
 MAKE=(make -C "${KERNEL_SRC}" O="${KERNEL_BUILD}" ARCH=arm64 CROSS_COMPILE="${CROSS_COMPILE}"
-	-j"$(nproc)" KBUILD_BUILD_USER=ubuntu KBUILD_BUILD_HOST=gemini)
+	-j"$(nproc)" KBUILD_BUILD_USER=ubuntu KBUILD_BUILD_HOST=gemini
+	LOCALVERSION=)   # no "+" suffix for a modified git tree
 
 log "Configuring kernel"
 cp "${TOP_DIR}/kernel/base.config" "${KERNEL_BUILD}/.config"
