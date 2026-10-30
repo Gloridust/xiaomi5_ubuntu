@@ -2,21 +2,32 @@
 # Install or update Claude Code with Anthropic's official installer.
 #   install-claude        install / update
 #   claude                start it   (claude-tmux: keeps running if SSH drops)
-set -euo pipefail
+set -uo pipefail
 if [ "$(id -u)" -eq 0 ]; then
 	echo "Run this as your normal user, without sudo:  install-claude"
 	exit 1
 fi
-echo "Checking internet..."
-if ! curl -fsS -m 15 -o /dev/null https://claude.ai; then
-	echo "No internet connection. Connect first with:  wifi"
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+echo "Downloading the Claude Code installer..."
+rc=0
+curl -fsSL -m 120 --retry 3 https://claude.ai/install.sh -o "$tmp" || rc=$?
+if [ "$rc" -ne 0 ]; then
+	if ! curl -sS -m 15 -o /dev/null https://ubuntu.com 2>/dev/null; then
+		echo "No internet connection. Connect first with:  wifi"
+	else
+		echo "Could not download https://claude.ai/install.sh (curl error $rc). Try again later."
+	fi
 	exit 1
 fi
-curl -fsSL https://claude.ai/install.sh | bash
+bash "$tmp" || { echo "The installer failed (see above)."; exit 1; }
+
 export PATH="$HOME/.local/bin:$PATH"
+# shellcheck disable=SC2016
 grep -qs 'local/bin' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 echo
-claude --version
+claude --version || { echo "Claude Code did not start."; exit 1; }
 echo
 echo "Done. Start Claude Code with:   claude"
 echo "Inside tmux (survives SSH disconnects):   claude-tmux"
