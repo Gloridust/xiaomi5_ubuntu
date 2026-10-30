@@ -45,8 +45,12 @@ Example: `sudo UI=sway WIFI_SSID=home WIFI_PASSWORD=secret ./build.sh`
 
 Output in `out/`: `boot.img`, `rootfs.sparse.img`, `linux-image-*.deb`.
 
-**Or download them** from this repository's GitHub Actions ("Build Mi 5 Ubuntu
-images" → *Run workflow*, then download the artifact) or a release.
+**Or download them** from this repository's GitHub Actions: open *Actions →
+Build Mi 5 Ubuntu images*, pick a successful run (or *Run workflow*, choosing
+the UI), and download the `xiaomi-gemini-ubuntu-26.04-<ui>` artifact. Unzip it;
+it contains `boot.img`, `rootfs.sparse.img.xz`, the kernel `.deb` and
+`SHA256SUMS`. Artifacts are kept for 30 days; push a `v*` tag to publish a
+permanent release instead.
 
 ## 3. Flash
 
