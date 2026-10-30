@@ -15,7 +15,7 @@ R="${GEMINI_ROOT:-}"
 CONF="$R/etc/default/gemini"
 # shellcheck source=/dev/null
 [ -r "$CONF" ] && . "$CONF"
-: "${KERNEL_CMDLINE:=root=LABEL=gemini-root rootwait rw console=tty0}"
+: "${KERNEL_CMDLINE:=root=LABEL=gemini-root rootwait ro console=tty0}"
 : "${DTB:=qcom/msm8996-xiaomi-gemini.dtb}"
 : "${FLASH_BOOT:=yes}"
 

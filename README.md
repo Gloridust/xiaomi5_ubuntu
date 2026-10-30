@@ -43,9 +43,10 @@ be redistributed. **The phone copies them from its own Android partitions on
 first boot** (`gemini-firmware-install`), or you can bake them in at build
 time (see [docs/FIRMWARE.md](docs/FIRMWARE.md)).
 
-> **Status:** the images build and the boot image format, firmware tooling and
-> configuration are tested automatically, but this port has not yet been tried
-> on a physical Mi 5 by the author of these scripts. Driver status above is
+> **Status:** the Ubuntu 26.04 rootfs build, the kernel-install → initramfs →
+> `boot.img` chain, the image packing and the firmware tooling have been run
+> and tested; the kernel compile runs in the GitHub Actions workflow. The port
+> has **not yet been booted on a physical Mi 5**. Driver status above comes
 > from the upstream kernel / postmarketOS work on the same hardware. Please
 > report what works on yours.
 
