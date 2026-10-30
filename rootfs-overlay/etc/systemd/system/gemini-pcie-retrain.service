@@ -2,6 +2,8 @@
 Description=Bring up the WiFi chip if its PCIe link didn't train at boot
 After=systemd-udev-settle.service systemd-modules-load.service
 Before=NetworkManager.service
+# the Mi 5's WiFi PCIe controller (not there in the QEMU boot test)
+ConditionPathExists=/sys/bus/platform/devices/600000.pcie
 
 [Service]
 Type=oneshot

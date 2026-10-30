@@ -8,7 +8,11 @@ ROOT=0000:00:00.0
 wifi_present() { ls -d /sys/bus/pci/devices/0000:01:00.* >/dev/null 2>&1; }
 
 wifi_present && exit 0
-[ -e "/sys/bus/pci/devices/$ROOT" ] || { echo "gemini-pcie-retrain: no PCIe root port"; exit 0; }
+# only the root port of the WiFi controller (600000.pcie), not some other PCI bus
+case "$(readlink -f "/sys/bus/pci/devices/$ROOT" 2>/dev/null)" in
+*/600000.pcie/*) ;;
+*) echo "gemini-pcie-retrain: no WiFi PCIe root port"; exit 0 ;;
+esac
 for try in 1 2 3; do
 	# Link Control: Retrain Link
 	setpci -s "$ROOT" CAP_EXP+10.w=0020:0020
