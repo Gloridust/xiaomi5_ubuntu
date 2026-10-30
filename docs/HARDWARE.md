@@ -15,15 +15,40 @@ How each part of the phone is driven, and how to check it.
 
 | UI | Keyboard | How it works |
 |---|---|---|
-| `console` (default) | **buffyboard** | draws on the framebuffer, sends keys to the active console through `uinput`, and shrinks the console so text isn't hidden. Config: `/etc/buffyboard.conf.d/gemini.conf` (theme, layout). |
-| `sway` | **wvkbd-mobintl** | Wayland layer-shell keyboard. **Volume up** shows/hides it, **volume down** opens a new terminal. Config: `/usr/local/share/gemini/sway/config`. |
+| `console` | **buffyboard** | draws on the framebuffer, sends keys to the active console through `uinput`, and shrinks the console so text isn't hidden. Config: `/etc/buffyboard.conf.d/gemini.conf` (theme, layout). |
+| `sway` (default) | **wvkbd-mobintl** | Wayland layer-shell keyboard. **Volume up** shows/hides it, **volume down** opens a new terminal. `Ctr`/`Alt` are sticky: tap `Ctr`, then `c` for Ctrl+C. Config: `/usr/local/share/gemini/sway/config`. |
 | `phosh` | **squeekboard** | appears automatically in text fields. |
 
-Switch an installed console system to the sway GUI:
+### The sway session
+
+- Runs as `gemini-sway.service` on tty7, logged in as the default user with
+  its own PAM stack (`/etc/pam.d/gemini-sway`): the image expires the first
+  password, and the normal `login` stack would then refuse to start the
+  session. Only starts when `/dev/dri/card0` exists.
+- Rendered by the GPU (EGL on `/dev/dri/card0`, Mesa freedreno). foot falls
+  back to WenQuanYi Micro Hei for Chinese text; 5000 lines of scrollback,
+  drag with a finger to scroll.
+- Status bar (`gemini-bar-status`, i3status plus the GPU clock):
+  `CPU | RAM | GPU clock | WiFi name + signal | CHG/BAT battery | time`. The
+  GPU clock goes from 133 MHz (idle) to 510 MHz (busy); its busy percentage
+  is only in debugfs.
+- **Power key**: screen off/on. Off = backlight 0 and touch disabled
+  (`gemini-sway-screen`). Not sway's `output power off`: the msm driver
+  rejects the atomic commit that disables the panel and the screen stays on.
+  `screen-timeout` / `SCREEN_TIMEOUT` set the idle timeout (`gemini-sway-idle`).
+- Screenshot: `grim shot.png` in the terminal.
+
+Switch an installed console system to the sway GUI (from a checkout of this
+repo, `rootfs-overlay` holds the files):
 
 ```bash
-sudo apt install sway swayidle swaylock foot wvkbd i3status fonts-dejavu-core libgl1-mesa-dri
-sudo cp /path/to/repo/rootfs-overlay/etc/systemd/system/gemini-sway.service /etc/systemd/system/
+sudo apt install --no-install-recommends sway swaybg swayidle swaylock foot wvkbd i3status grim \
+	fonts-dejavu-core fonts-wqy-microhei libgl1-mesa-dri libegl-mesa0 mesa-vulkan-drivers
+sudo cp rootfs-overlay/etc/systemd/system/gemini-sway.service /etc/systemd/system/
+sudo cp rootfs-overlay/etc/pam.d/gemini-sway /etc/pam.d/
+sudo cp rootfs-overlay/usr/local/bin/{gemini-sway-screen,gemini-sway-idle,gemini-bar-status,phone-help,screen-timeout} /usr/local/bin/
+sudo cp -r rootfs-overlay/usr/local/share/gemini/sway /usr/local/share/gemini/
+sudo sed -i '/buffyboard.service/d' /etc/udev/rules.d/90-gemini.rules
 sudo systemctl disable --now buffyboard gemini-powerkey
 sudo systemctl enable gemini-sway && sudo systemctl set-default graphical.target && sudo reboot
 ```
@@ -89,7 +114,11 @@ speaker-test -c 2 -t wav
 ## GPU
 
 Adreno 530 with Mesa freedreno (installed with the `sway`/`phosh` UIs or
-`sudo apt install libgl1-mesa-dri mesa-vulkan-drivers`). The generic GPU
+`sudo apt install libgl1-mesa-dri mesa-vulkan-drivers`). Tested on a Mi 5:
+freedreno FD530, OpenGL 3.1 / ES 3.2, Mesa 26.0. The msm driver probes from the
+initramfs, before the root filesystem with the GPU firmware is mounted; it
+loads `a530_pm4`/`a530_pfp`/`a530v3_gpmu` later, when the first program
+opens `/dev/dri/renderD128`. The generic GPU
 firmware comes from `linux-firmware-qualcomm-graphics`; the Xiaomi-signed
 **zap shader** `a530_zap.mbn` is installed from Android on first boot. Without
 it the display still works but there is no 3D acceleration.

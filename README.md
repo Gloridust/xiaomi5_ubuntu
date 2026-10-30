@@ -2,10 +2,13 @@
 
 Run **Ubuntu Server 26.04 "Resolute Raccoon"** (arm64) natively on a Xiaomi Mi 5,
 with a mainline-based Linux kernel, WiFi, Bluetooth, USB networking, battery
-support and a **touch on-screen keyboard**, so the phone works on its own as a
-small server, for example to run **Claude Code**.
+support and a **touch GUI with an on-screen keyboard** (sway, GPU-accelerated),
+so the phone works on its own as a small server, for example to run **Claude Code**.
 
 - Install from **TWRP** with one zip (or with fastboot)
+- Boots straight into a **touch terminal**: sway + foot + wvkbd keyboard,
+  rendered by the Adreno 530 (Mesa freedreno), Chinese fonts, a status bar
+  with CPU / RAM / GPU / WiFi / battery
 - A **text menu** (`menu`) and easy commands (`wifi`, `status`, `install-claude`, `install-pi`)
 - WiFi that **heals itself**: reconnects, resets the driver, and finally opens
   a rescue hotspot so you can always get back in
@@ -18,7 +21,7 @@ small server, for example to run **Claude Code**.
 | Kernel | [msm8996-mainline](https://gitlab.com/msm8996-mainline/linux) `v6.19.5-msm8996` (mainline + MSM8996 patches) |
 | Boot | stock Xiaomi bootloader → Android boot image (kernel + DTB + Ubuntu initramfs) |
 | Root FS | ext4 on the `userdata` partition, grows to ~24 GB on first boot |
-| Keyboard | `buffyboard` on the text console (default), or sway + `wvkbd`, or phosh + `squeekboard` |
+| UI / keyboard | sway + foot terminal + `wvkbd` (default), or `buffyboard` on the text console, or phosh + `squeekboard` |
 
 ## Hardware support
 
@@ -35,7 +38,7 @@ small server, for example to run **Claude Code**.
 | USB OTG host (keyboard, disks) | dwc3 + TUSB320L type-C + PMI8994 VBUS | ✅ |
 | Battery level, charging | PMI8994 fuel gauge + smbchg (msm8996-mainline) | ✅ fork patches |
 | Buttons (power, volume, home) | pm8941-pwrkey, gpio-keys | ✅ upstream |
-| GPU Adreno 530 (OpenGL ES 3.2 / Vulkan) | msm + Mesa freedreno | ✅ needs device firmware ¹ |
+| GPU Adreno 530 (OpenGL ES 3.2 / Vulkan) | msm + Mesa freedreno | ✅ tested on a Mi 5 (sway renders with it), needs device firmware ¹ |
 | Audio: speaker, earpiece, headset | ADSP + WCD9335, UCM config included | ⚠️ needs device firmware ¹ |
 | Video decode/encode | venus | ⚠️ needs device firmware ¹ |
 | Modem (LTE data, SMS) | q6v5-mss + rmtfs + ModemManager | ⚠️ needs device firmware ¹, experimental |
@@ -69,7 +72,9 @@ stay at the bootloader's 1.04 GHz.
    [release](https://github.com/Gloridust/xiaomi5_ubuntu/releases/latest) (built and boot-tested automatically).
 2. TWRP → Advanced → ADB Sideload, then `adb sideload ubuntu-26.04-xiaomi-gemini-twrp.zip`
    (or TWRP → Install → the zip). This **erases Android's user data**.
-3. Reboot. Log in **ubuntu / ubuntu** and choose a new password.
+3. Reboot. The phone starts into a terminal with the on-screen keyboard.
+   The first `sudo` asks for the password **ubuntu** and makes you choose a new one
+   (SSH logins ask too).
 4. The menu opens: **WiFi → Connect to a network**.
 5. `install-claude`, then `claude`. Or `install-pi` (DeepSeek), then `pi`.
 
@@ -77,8 +82,8 @@ Easy commands: [docs/COMMANDS.md](docs/COMMANDS.md). From a PC over USB:
 `ssh ubuntu@172.16.42.1`.
 
 Build it yourself on an Ubuntu 24.04+ PC (~20 GB disk, 1–2 h):
-`sudo ./build.sh && sudo scripts/40-make-twrp-zip.sh` (`UI=sway` or `UI=phosh`
-for a touch GUI; the default console UI needs the least RAM).
+`sudo ./build.sh && sudo scripts/40-make-twrp-zip.sh` (default `UI=sway`;
+`UI=console` needs the least RAM, `UI=phosh` is a full phone shell).
 
 Full guide: [docs/INSTALL.md](docs/INSTALL.md) ·
 Hardware details: [docs/HARDWARE.md](docs/HARDWARE.md) ·
@@ -112,8 +117,10 @@ tools/mkbootimg/            AOSP mkbootimg (Ubuntu 24.04's package is broken)
 | `gemini-mkbootimg` | rebuilds `boot.img` and flashes it after every kernel/initramfs update (hooked into apt) |
 | `gemini-firmware-install` | finds the signed firmware on the Android partitions and installs it |
 | `gemini-usb-gadget` | USB network (`172.16.42.1`, DHCP for the PC) + USB serial console |
-| `buffyboard.service` | on-screen keyboard on the text console |
-| `gemini-powerkey` | power key toggles the screen; auto screen-off after 2 min |
+| `gemini-sway.service` | the touch session: sway + terminal + wvkbd keyboard on tty7 (`UI=sway`) |
+| `gemini-sway-screen`, `gemini-sway-idle`, `gemini-bar-status` | sway: power key / idle screen-off, status bar |
+| `buffyboard.service` | on-screen keyboard on the text console (`UI=console`) |
+| `gemini-powerkey` | text console: power key toggles the screen; auto screen-off after 2 min |
 | `gemini-bt-mac` | gives the Bluetooth controller a stable MAC address |
 | `gemini-status` / `status` | one-screen hardware overview |
 | `menu`, `wifi`, `install-claude`, `install-pi`, `phone-help` | text menu and easy commands ([docs/COMMANDS.md](docs/COMMANDS.md)) |

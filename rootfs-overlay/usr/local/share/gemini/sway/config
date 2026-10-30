@@ -2,6 +2,7 @@
 #   Volume up      show/hide the on-screen keyboard
 #   Volume down    open another terminal
 #   Power (short)  screen on/off      Power (3 s): power off
+#   The screen turns off after SCREEN_TIMEOUT s (/etc/default/gemini, screen-timeout)
 #   Swipe the top bar / tap a title to switch windows
 
 set $term foot -c /usr/local/share/gemini/sway/foot.ini
@@ -20,7 +21,7 @@ font pango:DejaVu Sans 8
 
 bar {
 	position top
-	status_command i3status -c /usr/local/share/gemini/sway/i3status.conf
+	status_command /usr/local/bin/gemini-bar-status
 	font pango:DejaVu Sans Mono 8
 	colors {
 		background #2c001e
@@ -29,11 +30,12 @@ bar {
 }
 
 bindsym XF86AudioRaiseVolume exec pkill -RTMIN wvkbd-mobintl
-bindsym XF86AudioLowerVolume exec $term
+bindsym XF86AudioLowerVolume # the first terminal starts with the list of easy commands
+exec $term bash -c 'phone-help; exec bash'
 bindsym --locked XF86PowerOff exec /usr/local/bin/gemini-sway-screen toggle
 
 exec wvkbd-mobintl -H 260 -L 180
 exec $term
-exec swayidle -w timeout 120 '/usr/local/bin/gemini-sway-screen off'
+exec /usr/local/bin/gemini-sway-idle
 
 include /etc/sway/config.d/*

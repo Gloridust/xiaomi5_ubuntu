@@ -186,7 +186,7 @@ EOF
 	;;
 esac
 # Remove the GUI session files when the console UI is used
-[ "${UI}" = sway ] || rm -f "$R/etc/systemd/system/gemini-sway.service"
+[ "${UI}" = sway ] || rm -f "$R/etc/systemd/system/gemini-sway.service" "$R/etc/pam.d/gemini-sway"
 
 if [ -n "${KERNEL_DEB}" ]; then
 	log "Installing kernel $(basename "${KERNEL_DEB}")"

@@ -21,6 +21,13 @@ to `userdata` (`fastboot flash userdata rootfs.sparse.img`). In the shell,
 
 ## No on-screen keyboard
 
+sway UI: press **volume up** (it may just be hidden). Otherwise, over SSH:
+```bash
+systemctl status gemini-sway       # the touch session on tty7
+journalctl -b -u gemini-sway       # sway's errors
+ls /dev/dri/card0                  # the session only starts when the display driver is up
+```
+Console UI:
 ```bash
 systemctl status buffyboard        # should be running when /dev/fb0 exists
 ls /dev/fb0 /dev/uinput
@@ -38,7 +45,8 @@ flipped Y axis:
 ```bash
 echo 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 -1 1"' |
 	sudo tee /etc/udev/rules.d/91-touch-calibration.rules
-sudo udevadm control --reload && sudo udevadm trigger && sudo systemctl restart buffyboard
+sudo udevadm control --reload && sudo udevadm trigger
+sudo systemctl restart gemini-sway   # console UI: sudo systemctl restart buffyboard
 ```
 
 ## WiFi missing

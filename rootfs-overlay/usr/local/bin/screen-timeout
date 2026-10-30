@@ -6,5 +6,12 @@ CONF=/etc/default/gemini
 if [ -z "${1:-}" ]; then grep '^SCREEN_TIMEOUT=' "$CONF"; exit 0; fi
 [[ "$1" =~ ^[0-9]+$ ]] || { echo "usage: screen-timeout SECONDS"; exit 1; }
 sed -i "s/^SCREEN_TIMEOUT=.*/SCREEN_TIMEOUT=$1/" "$CONF"
-systemctl restart gemini-powerkey 2>/dev/null
+# text console: gemini-powerkey reads it at start (try-: don't start it under sway)
+systemctl try-restart gemini-powerkey 2>/dev/null
+# sway: restart the idle timer inside the running session
+if pid=$(pgrep -xo sway); then
+	sock=$(ls "/run/user/$(stat -c %u "/proc/$pid")"/sway-ipc.*.sock 2>/dev/null | head -1)
+	pkill -x swayidle
+	[ -n "$sock" ] && SWAYSOCK=$sock swaymsg exec /usr/local/bin/gemini-sway-idle >/dev/null
+fi
 echo "Screen timeout: $1 s"

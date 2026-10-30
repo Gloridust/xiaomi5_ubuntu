@@ -4,7 +4,7 @@ Type `phone-help` on the phone to see this list.
 
 | Command | What it does |
 |---|---|
-| `menu` | menu with everything below (opens by itself after login on the phone screen) |
+| `menu` | menu with everything below (console UI: opens by itself after login on the phone screen) |
 | `wifi` | connect to WiFi: pick a network from a list, type the password |
 | `wifi status` | am I online, which network, which IP address |
 | `wifi list` | networks in range |
@@ -24,20 +24,27 @@ Type `phone-help` on the phone to see this list.
 
 ## Buttons
 
-| Button | Action |
-|---|---|
-| Power (short) | screen on / off |
-| Power (hold 3 s) | power off |
-| Volume up / down | arrow up / down (move in the menu) |
-| Home (front button) | Enter (choose in the menu) |
+| Button | sway UI (default) | console UI |
+|---|---|---|
+| Power (short) | screen on / off | screen on / off |
+| Power (hold 3 s) | power off | power off |
+| Volume up | show / hide the keyboard | arrow up (move in the menu) |
+| Volume down | open another terminal | arrow down |
+| Home (front button) | – | Enter (choose in the menu) |
 
-The first press while the screen is off only wakes it up.
+Console UI: the first press while the screen is off only wakes it up.
 
 ## On-screen keyboard
 
-The keyboard at the bottom of the screen (buffyboard) types into the console.
-It has Esc, Tab, Ctrl and Alt keys and a symbols layer; use the volume
-keys as arrow up/down.
+**sway UI** (wvkbd): Esc, Tab, arrow keys and `Ctr` (Ctrl) are on the top row.
+`Ctr` is sticky: tap `Ctr`, then `c` for Ctrl+C. The bottom-left key switches
+to numbers and symbols; `Cmp` types accented letters. Drag a finger up/down
+over the terminal to scroll back; tap the titles at the top to switch
+terminals. The status bar shows CPU, RAM, GPU clock, WiFi (name and signal),
+battery (`CHG` = charging, `BAT` = on battery) and the time.
+
+**console UI** (buffyboard): types into the console. It has Esc, Tab, Ctrl and
+Alt keys and a symbols layer; use the volume keys as arrow up/down.
 
 ## Getting back in when WiFi is gone
 

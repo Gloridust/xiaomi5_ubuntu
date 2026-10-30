@@ -14,8 +14,8 @@ on:
       ui:
         description: 'On-screen keyboard / UI'
         type: choice
-        options: [console, sway, phosh]
-        default: console
+        options: [sway, console, phosh]
+        default: sway
 
 permissions:
   contents: write   # create releases
@@ -39,12 +39,12 @@ jobs:
             rootfs-overlay/usr/local/sbin/gemini-firstboot \
             rootfs-overlay/usr/local/sbin/gemini-bt-mac \
             rootfs-overlay/usr/local/sbin/gemini-wifi-watchdog \
-            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,wifi,menu,install-claude,claude-tmux,install-pi,pi-tmux,bright,screen-timeout,phone-help,update} \
+            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,gemini-sway-idle,wifi,menu,install-claude,claude-tmux,install-pi,pi-tmux,bright,screen-timeout,phone-help,update} \
             rootfs-overlay/etc/profile.d/zz-gemini-menu.sh \
             rootfs-overlay/etc/update-motd.d/60-gemini
           shellcheck -S warning -s sh twrp/update-binary
       - name: Python syntax
-        run: python3 -m py_compile tests/*.py rootfs-overlay/usr/local/sbin/gemini-firmware-install rootfs-overlay/usr/local/sbin/gemini-powerkey
+        run: python3 -m py_compile tests/*.py rootfs-overlay/usr/local/sbin/gemini-firmware-install rootfs-overlay/usr/local/sbin/gemini-powerkey rootfs-overlay/usr/local/bin/gemini-bar-status
       - name: Firmware squash test
         run: python3 -I tests/test_firmware_squash.py
       - name: Power key / buttons test
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     env:
-      UI: ${{ inputs.ui || 'console' }}
+      UI: ${{ inputs.ui || 'sway' }}
     steps:
       - name: Free disk space
         run: |
@@ -107,7 +107,7 @@ jobs:
         run: |
           if [ "${GITHUB_REF_TYPE}" = tag ]; then tag="${GITHUB_REF_NAME}"
           else tag="v26.04-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"; fi
-          [ "$UI" = console ] || tag="${tag}-${UI}"
+          [ "$UI" = sway ] || tag="${tag}-${UI}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -115,7 +115,7 @@ jobs:
           tag_name: ${{ steps.rel.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: Ubuntu 26.04 for Xiaomi Mi 5 (${{ env.UI }}) ${{ steps.rel.outputs.tag }}
-          make_latest: ${{ env.UI == 'console' }}
+          make_latest: ${{ env.UI == 'sway' }}
           body: |
             Ubuntu 26.04 LTS (server) for the Xiaomi Mi 5 (gemini), kernel 6.19 msm8996-mainline.
             Built and boot-tested in QEMU (incl. installing Claude Code) by GitHub Actions.
@@ -124,7 +124,9 @@ jobs:
             1. Copy `ubuntu-26.04-xiaomi-gemini-twrp.zip` to a USB OTG drive, or use `adb sideload ubuntu-26.04-xiaomi-gemini-twrp.zip`
                (if the zip is on internal storage, the installer copies it to RAM first)
             2. TWRP → Install → the zip → Reboot System
-            3. Log in `ubuntu` / `ubuntu`, choose a new password. The menu opens: WiFi → Connect.
+            3. The phone starts into a terminal with an on-screen keyboard (sway UI). Type `wifi` to connect;
+               the first `sudo` asks for the password `ubuntu` and makes you choose a new one.
+               (Console UI builds: log in `ubuntu` / `ubuntu`, the menu opens.)
             4. `install-claude`, then `claude` (or `install-pi`, then `pi` with a DeepSeek key)
 
             **Or with fastboot:** `fastboot flash boot boot.img` and `fastboot flash userdata rootfs.sparse.img` (unpack the .xz first).

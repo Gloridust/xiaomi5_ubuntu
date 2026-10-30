@@ -77,7 +77,12 @@ try:
     check("ls -l /boot/boot.img", r"boot\.img-")
     check("systemd-analyze", r"graphical\.target reached|multi-user\.target reached")
     # phone tools
-    check("systemctl is-enabled gemini-wifi-watchdog.timer gemini-powerkey buffyboard | sort -u", r"^enabled$")
+    check("systemctl is-enabled gemini-wifi-watchdog.timer", r"^enabled$")
+    # sway UI: enabled, but skipped here (no /dev/dri/card0 in QEMU); console UI: keyboard + power key
+    check("{ systemctl is-enabled gemini-sway 2>/dev/null || systemctl is-enabled gemini-powerkey buffyboard; } | sort -u",
+          r"^enabled$")
+    check("[ ! -e /etc/systemd/system/gemini-sway.service ] || systemctl show -p ConditionResult gemini-sway",
+          r"^(ConditionResult=no)?$")
     check("sudo -n wifi status; echo rc=$?", r"No WiFi device")  # no WiFi chip in QEMU, but sudo works
     check("grep -c '^HOTSPOT_PASSWORD=' /etc/default/gemini", r"^1$")
     check("phone-help | head -2", r"easy commands")
