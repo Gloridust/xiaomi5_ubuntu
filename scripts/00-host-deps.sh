@@ -12,7 +12,8 @@ pkgs=(git curl ca-certificates xz-utils zstd cpio kmod rsync file
 if [ "$(uname -m)" = aarch64 ]; then
 	pkgs+=(gcc)          # native compiler also answers to aarch64-linux-gnu-gcc
 else
-	pkgs+=(gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user-static binfmt-support)
+	pkgs+=(gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
+		qemu-user-static binfmt-support)
 fi
 apt-get update
 apt-get install -y --no-install-recommends "${pkgs[@]}"

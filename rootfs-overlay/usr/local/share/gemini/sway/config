@@ -10,6 +10,7 @@ output DSI-1 scale 2.5
 output * bg #2c001e solid_color
 input type:touch map_to_output DSI-1
 seat * hide_cursor 2000
+xwayland disable
 
 default_border pixel 2
 hide_edge_borders smart
