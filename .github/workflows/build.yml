@@ -65,6 +65,7 @@ jobs:
         run: sudo ./scripts/30-make-images.sh
       - name: Boot test in QEMU
         run: |
+          sudo apt-get update
           sudo apt-get install -y qemu-system-arm
           sudo ./tests/qemu-boot.sh
       - name: Compress
