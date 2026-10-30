@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 pkgs=(git curl ca-certificates xz-utils zstd cpio kmod rsync file
 	build-essential bc bison flex libssl-dev libelf-dev dwarves python3
 	dpkg-dev debhelper fakeroot
-	mmdebstrap debootstrap ubuntu-keyring
+	debootstrap ubuntu-keyring arch-test
 	android-sdk-libsparse-utils e2fsprogs device-tree-compiler)
 if [ "$(uname -m)" = aarch64 ]; then
 	pkgs+=(gcc)          # native compiler also answers to aarch64-linux-gnu-gcc
@@ -17,6 +17,9 @@ else
 fi
 apt-get update
 apt-get install -y --no-install-recommends "${pkgs[@]}"
+# mmdebstrap relies on its Recommends (arch-test, apt-utils, gpg...) for
+# foreign-architecture builds, so install it with them.
+apt-get install -y mmdebstrap
 
 # Make sure arm64 binaries can run in the chroot (containers often lack this).
 if [ "$(uname -m)" != aarch64 ] && [ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
