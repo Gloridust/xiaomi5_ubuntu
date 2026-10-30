@@ -10,6 +10,7 @@
 - Volume up / volume down / Home button act as arrow up / arrow down /
   Enter, so the text menu can be used with the buttons (KEY_REMAP=no in
   /etc/default/gemini turns this off).
+- Keeps the on-screen keyboard's picture current (see Flusher).
 
 Not used by the sway/phosh UIs, which manage the screen themselves.
 """
@@ -68,6 +69,58 @@ class Screen:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
+class Flusher:
+    """Push the framebuffer to the panel.
+
+    The Mi 5's JDI panel runs in DSI command mode: the display controller
+    only sends a frame when something commits one. fbcon does that for the
+    console text, but buffyboard draws straight into the mmap()ed
+    framebuffer, which commits nothing - so after tapping "123" the keyboard
+    switched layers but the screen kept showing letters until the console
+    printed something. Writing a pixel through /dev/fb0 makes the kernel
+    commit a frame (the whole screen, in command mode); this rewrites the
+    bottom-right pixel with its own value.
+
+    ~30 frames/s while the touchscreen is in use and for BURST s after,
+    once a second otherwise, nothing while the screen is off.
+    """
+    FAST, SLOW, BURST = 1 / 30, 1.0, 0.6
+
+    def __init__(self):
+        self.fd = None
+        self.last = 0.0
+        self.burst_until = 0.0
+        try:
+            def num(name):
+                with open("/sys/class/graphics/fb0/" + name) as f:
+                    return [int(x) for x in f.read().split(",")]
+            xres, yres = num("virtual_size")
+            bpp, = num("bits_per_pixel")
+            stride, = num("stride")
+            self.size = bpp // 8
+            self.offset = stride * (yres - 1) + (xres - 1) * self.size
+            self.fd = os.open("/dev/fb0", os.O_RDWR | os.O_CLOEXEC)
+        except (OSError, ValueError) as e:
+            print("gemini-powerkey: framebuffer flush off: %s" % e, file=sys.stderr)
+
+    def touched(self, now):
+        self.burst_until = now + self.BURST
+
+    def wait(self, now):
+        """Seconds until the next flush is due."""
+        if self.fd is None:
+            return None
+        interval = self.FAST if now < self.burst_until else self.SLOW
+        return max(0.0, self.last + interval - now)
+
+    def flush(self, now):
+        self.last = now
+        try:
+            os.pwrite(self.fd, os.pread(self.fd, self.size, self.offset), self.offset)
+        except OSError:
+            pass
+
+
 def open_devices():
     keys, touch, other = [], [], []
     for path in evdev.list_devices():
@@ -115,6 +168,10 @@ def main():
     conf = read_conf()
     timeout = int(conf.get("SCREEN_TIMEOUT", "120") or 0)
     screen = Screen()
+    # the screen may have been left off by an earlier run: start from "on"
+    screen.on = False
+    screen.set(True)
+    flusher = Flusher()
     keys, touch, other = open_devices()
     if not keys:
         print("gemini-powerkey: no power key found", file=sys.stderr)
@@ -131,11 +188,14 @@ def main():
         wait = None
         if timeout and screen.on:
             wait = max(0.5, timeout - (time.monotonic() - last))
+        if screen.on:
+            fw = flusher.wait(time.monotonic())
+            if fw is not None:
+                wait = fw if wait is None else min(wait, fw)
         r, _, _ = select.select(list(devices), [], [], wait)
         now = time.monotonic()
-        if not r:
-            if timeout and screen.on and now - last >= timeout:
-                screen.set(False)
+        if not r and timeout and screen.on and now - last >= timeout:
+            screen.set(False)
         for fd in r:
             dev = devices[fd]
             try:
@@ -165,6 +225,10 @@ def main():
                     last = now
                 elif ev.type in (ecodes.EV_KEY, ecodes.EV_ABS) and screen.on:
                     last = now
+                    if dev in touch:
+                        flusher.touched(now)
+        if screen.on and flusher.wait(now) == 0.0:
+            flusher.flush(now)
         # grab the touchscreen while dark so taps don't reach buffyboard
         want_grab = not screen.on
         if want_grab != grabbed:
