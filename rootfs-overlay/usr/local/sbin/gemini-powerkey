@@ -7,6 +7,7 @@
 - While the screen is off the touchscreen is "grabbed" so taps on the dark
   screen don't type into the on-screen keyboard.
 - Long press (3 s) powers off - handled by systemd-logind.
+- SIGUSR1 turns the screen off (phone-sleep, before the phone sleeps).
 - Volume up / volume down / Home button act as arrow up / arrow down /
   Enter, so the text menu can be used with the buttons (KEY_REMAP=no in
   /etc/default/gemini turns this off).
@@ -17,6 +18,7 @@ Not used by the sway/phosh UIs, which manage the screen themselves.
 import glob
 import os
 import select
+import signal
 import subprocess
 import sys
 import time
@@ -183,6 +185,10 @@ def main():
     last = time.monotonic()
     pressed_at = None
     waking = None  # key that woke the screen: don't also send it
+    # SIGUSR1 (phone-sleep): screen off, so the power key that wakes the
+    # phone from sleep turns it back on
+    off_requested = []
+    signal.signal(signal.SIGUSR1, lambda *_: off_requested.append(True))
 
     while True:
         wait = None
@@ -192,8 +198,13 @@ def main():
             fw = flusher.wait(time.monotonic())
             if fw is not None:
                 wait = fw if wait is None else min(wait, fw)
+            # look at off_requested at least once a second
+            wait = 1.0 if wait is None else min(wait, 1.0)
         r, _, _ = select.select(list(devices), [], [], wait)
         now = time.monotonic()
+        if off_requested:
+            off_requested.clear()
+            screen.set(False)
         if not r and timeout and screen.on and now - last >= timeout:
             screen.set(False)
         for fd in r:

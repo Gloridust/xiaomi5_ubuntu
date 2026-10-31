@@ -14,6 +14,9 @@ cat <<'TXT'
  pi                start pi            (pi-tmux: survives disconnects)
  bright 40         screen brightness in %
  screen-timeout 60 screen off after 60 s idle (0 = never)
+ cpu               CPU speed and temperature (cpu full / safe / off)
+ phone-sleep       sleep now, power key wakes it (phone-sleep auto 10:
+                   sleep after 10 min with the screen off, on battery)
  update            update Ubuntu (apt)
  sudo reboot       restart          sudo poweroff   shut down
  ------------------------------------------------------------

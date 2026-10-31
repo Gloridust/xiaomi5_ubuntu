@@ -1,0 +1,3 @@
+#!/bin/sh
+# systemd-sleep hook: $1 = pre|post, $2 = suspend|...
+exec /usr/local/sbin/gemini-sleep "$1" "$2"

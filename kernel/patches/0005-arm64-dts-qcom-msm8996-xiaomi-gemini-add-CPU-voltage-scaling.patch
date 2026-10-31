@@ -1,0 +1,251 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 30 Oct 2026 22:28:26 +0000
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-gemini: add CPU voltage
+ scaling
+
+The CPU OPP tables have no voltages and the CPUs have no supply, so
+cpufreq changes the clock while VDD_APCC stays wherever the bootloader
+left it. Raising the clock above what that voltage allows hangs the
+phone.
+
+Mainline has no CPR3 driver for MSM8996. Use the open-loop ceilings
+of the downstream kernel instead (msm8996-regulator.dtsi,
+qcom,cpr-voltage-ceiling, with the corner maps of msm8996-v3.dtsi),
+which every chip must run at:
+
+  power cluster   <= 1228.8 MHz  905 mV, above 1140 mV
+  perf cluster    <= 1248.0 MHz  905 mV, above 1140 mV
+
+The CBF frequency each OPP votes for stays inside the same corner.
+The lower corners (670/745 mV) are left out on purpose: below 850 mV
+the memory arrays have to be switched to the MX rail (APM) and below
+700 mV the MEM-ACC settings have to change, and mainline drives
+neither. Both clusters share the rail, so every OPP accepts up to
+1140 mV and the regulator core picks the higher request.
+---
+ .../boot/dts/qcom/msm8996-xiaomi-gemini.dts   | 211 ++++++++++++++++++
+ 1 file changed, 211 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+index 9e9221746..3a2e2845a 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+@@ -116,6 +116,217 @@ synaptics@20 {
+ 
+ };
+ 
++/*
++ * CPU voltage scaling. Mainline has no CPR3 driver for MSM8996, so use the
++ * downstream open-loop ceilings (msm8996-regulator.dtsi, qcom,cpr-voltage-ceiling),
++ * which are safe for every chip: 905 mV up to the NOM fuse corner
++ * (power cluster 1228.8 MHz, performance cluster 1248 MHz), 1140 mV above.
++ * The lower corners (670/745 mV) are not used: below 850 mV the memory arrays
++ * must move to the MX rail (APM) and below 700 mV the MEM-ACC settings must
++ * change, and mainline has drivers for neither.
++ * Both clusters share VDD_APCC, so each OPP allows up to 1140 mV and the
++ * regulator core settles on the higher of the two clusters' requests.
++ */
++&cluster0_opp {
++	opp-307200000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-422400000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-480000000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-556800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-652800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-729600000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-844800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-960000000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1036800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1113600000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1190400000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1228800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1324800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1363200000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1401600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1478400000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1497600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1593600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++};
++
++&cluster1_opp {
++	opp-307200000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-403200000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-480000000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-556800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-652800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-729600000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-806400000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-883200000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-940800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1036800000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1113600000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1190400000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1248000000 {
++		opp-microvolt = <905000 905000 1140000>;
++	};
++
++	opp-1324800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1401600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1478400000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1555200000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1632000000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1708800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1785600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1804800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1824000000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1900800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1920000000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-1996800000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-2073600000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++
++	opp-2150400000 {
++		opp-microvolt = <1140000 1140000 1140000>;
++	};
++};
++
++&cpu0 {
++	cpu-supply = <&vreg_apc_0p8>;
++};
++
++&cpu1 {
++	cpu-supply = <&vreg_apc_0p8>;
++};
++
++&cpu2 {
++	cpu-supply = <&vreg_apc_0p8>;
++};
++
++&cpu3 {
++	cpu-supply = <&vreg_apc_0p8>;
++};
++
+ &gpu_zap_shader {
+ 	firmware-name = "qcom/msm8996/gemini/a530_zap.mbn";
+ };

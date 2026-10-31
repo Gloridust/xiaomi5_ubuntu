@@ -1,0 +1,14 @@
+[Unit]
+Description=CPU frequency scaling (CPU_SPEED in /etc/default/gemini, see: cpu)
+After=local-fs.target systemd-modules-load.service
+ConditionPathIsDirectory=/sys/devices/system/cpu
+
+[Service]
+# Stays "active" after the confirmation so ExecStop runs on a clean shutdown.
+Type=exec
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/gemini-cpufreq run
+ExecStop=/usr/local/sbin/gemini-cpufreq stop
+
+[Install]
+WantedBy=multi-user.target

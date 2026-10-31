@@ -40,7 +40,10 @@ jobs:
             rootfs-overlay/usr/local/sbin/gemini-bt-mac \
             rootfs-overlay/usr/local/sbin/gemini-wifi-watchdog \
             rootfs-overlay/usr/local/sbin/gemini-usb-current \
-            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,gemini-sway-idle,wifi,menu,install-claude,claude-tmux,install-pi,pi-tmux,bright,screen-timeout,phone-help,update} \
+            rootfs-overlay/usr/local/sbin/gemini-cpufreq \
+            rootfs-overlay/usr/local/sbin/gemini-sleep \
+            rootfs-overlay/usr/lib/systemd/system-sleep/gemini \
+            rootfs-overlay/usr/local/bin/{gemini-status,gemini-sway-screen,gemini-sway-idle,wifi,menu,install-claude,claude-tmux,install-pi,pi-tmux,bright,screen-timeout,phone-help,update,cpu,phone-sleep} \
             rootfs-overlay/etc/profile.d/zz-gemini-menu.sh \
             rootfs-overlay/etc/update-motd.d/60-gemini
           shellcheck -S warning -s sh twrp/update-binary
@@ -52,6 +55,10 @@ jobs:
         run: python3 -I tests/test_powerkey.py
       - name: PC charging limit test
         run: bash tests/test_usb_current.sh
+      - name: CPU speed (cpufreq crash guard) test
+        run: bash tests/test_cpufreq.sh
+      - name: Sleep test
+        run: bash tests/test_sleep.sh
       - name: Boot image test
         run: bash tests/test_mkbootimg.sh
       - name: TWRP installer test

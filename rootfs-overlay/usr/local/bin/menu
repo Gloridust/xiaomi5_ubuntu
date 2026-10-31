@@ -118,8 +118,10 @@ system_menu() {
 		3 "Disk and memory usage" \
 		4 "Reinstall device firmware (GPU/audio/modem)" \
 		5 "Set time zone" \
-		6 "Don't open this menu at login" \
-		7 "Open this menu at login" \
+		6 "CPU speed" \
+		7 "Sleep" \
+		8 "Don't open this menu at login" \
+		9 "Open this menu at login" \
 		3>&1 1>&2 2>&3) || return
 	case $c in
 	1) run update ;;
@@ -127,8 +129,38 @@ system_menu() {
 	3) run sh -c 'df -h /; echo; free -h' ;;
 	4) run sudo gemini-firmware-install --force ;;
 	5) clear; sudo dpkg-reconfigure tzdata; pause ;;
-	6) touch "$HOME/.no-auto-menu"; msg "Menu" "OK. Type 'menu' to open it." ;;
-	7) rm -f "$HOME/.no-auto-menu"; msg "Menu" "OK." ;;
+	6) cpu_menu ;;
+	7) sleep_menu ;;
+	8) touch "$HOME/.no-auto-menu"; msg "Menu" "OK. Type 'menu' to open it." ;;
+	9) rm -f "$HOME/.no-auto-menu"; msg "Menu" "OK." ;;
+	esac
+}
+
+cpu_menu() {
+	c=$(whiptail --title "CPU speed" --menu "$(cpu 2>/dev/null | head -4)" "$H" "$W" "$L" \
+		1 "Full (up to 2.15 GHz)" \
+		2 "Safe (up to 1.2 GHz, cooler)" \
+		3 "Off (fixed 1 GHz)" \
+		3>&1 1>&2 2>&3) || return
+	case $c in
+	1) run sudo cpu full ;;
+	2) run sudo cpu safe ;;
+	3) run sudo cpu off ;;
+	esac
+}
+
+sleep_menu() {
+	c=$(whiptail --title "Sleep" --menu "$(sudo phone-sleep auto 2>/dev/null)\nAsleep = off the network. Power key wakes it." "$H" "$W" "$L" \
+		1 "Sleep now" \
+		2 "Sleep after 5 min with the screen off" \
+		3 "Sleep after 15 min with the screen off" \
+		4 "Never sleep by itself" \
+		3>&1 1>&2 2>&3) || return
+	case $c in
+	1) run sudo phone-sleep ;;
+	2) run sudo phone-sleep auto 5 ;;
+	3) run sudo phone-sleep auto 15 ;;
+	4) run sudo phone-sleep auto 0 ;;
 	esac
 }
 

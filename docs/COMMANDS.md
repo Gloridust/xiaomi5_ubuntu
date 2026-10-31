@@ -19,6 +19,8 @@ Type `phone-help` on the phone to see this list.
 | `pi` / `pi-tmux` | start pi (tmux version survives SSH drops); `pi update` updates it |
 | `bright 40` | screen brightness 40 % |
 | `screen-timeout 60` | screen off after 60 s without input (`0` = never) |
+| `cpu` | CPU speed, clocks and temperature; `cpu full` / `cpu safe` / `cpu off` to change it |
+| `phone-sleep` | sleep now (power key wakes it); `phone-sleep auto 10` = sleep after 10 min with the screen off on battery, `0` = never |
 | `update` | update Ubuntu and the kernel |
 | `sudo reboot` / `sudo poweroff` | restart / shut down |
 
@@ -58,7 +60,8 @@ Alt keys and a symbols layer; use the volume keys as arrow up/down.
 
 `/etc/default/gemini`: screen timeout, button remapping, rescue hotspot
 (`AUTO_HOTSPOT`, `HOTSPOT_SSID`, `HOTSPOT_PASSWORD`, `HOTSPOT_AFTER`), charging
-from a PC (`USB_PC_CURRENT`), kernel command line.
+from a PC (`USB_PC_CURRENT`), CPU speed (`CPU_SPEED`), automatic sleep
+(`AUTO_SLEEP`, `SLEEP_BLOCKERS`), kernel command line.
 
 **Charging from a PC loses charge?** A PC's USB port gives 500 mA, less than the
 phone uses with the screen on. On a USB 3.0 port (usually blue) set

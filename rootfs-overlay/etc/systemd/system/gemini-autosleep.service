@@ -1,0 +1,6 @@
+[Unit]
+Description=Sleep when the screen has been off for AUTO_SLEEP minutes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gemini-sleep auto

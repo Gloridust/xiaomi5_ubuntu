@@ -165,10 +165,75 @@ the battery ran completely flat the RTC restarts from zero; the clock then
 continues from the last saved time until NTP fixes it. Set it by hand with
 `sudo date -s '2026-10-31 12:00'` (saved within the hour or at shutdown).
 
+## CPU speed
+
+Two Kryo clusters: CPUs 0–1 ("small", up to 1.59 GHz) and 2–3 ("big", up to
+2.15 GHz), clocked by `clk-cpu-8996`, with the frequency tables of
+`msm8996.dtsi` and the speed bin from the fuses (`qcom-cpufreq-nvmem`). All
+four share one supply, VDD_APCC (PM8994 S8–S11, set through the SAW).
+
+Mainline has no CPR3 driver for MSM8996, so the OPPs had no voltages and the
+clock was changed without touching the supply: going faster than the
+bootloader's voltage allowed locked up the phone (`cpufreq.off=1` until now).
+Kernel patch 0005 adds `cpu-supply` and per-OPP voltages taken from the
+downstream (LineageOS) kernel's open-loop **ceilings**, which every chip must
+run at (`msm8996-regulator.dtsi`, `qcom,cpr-voltage-ceiling`):
+
+| | 905 mV | 1140 mV |
+|---|---|---|
+| small cores | 307 MHz – 1.23 GHz | 1.32 – 1.59 GHz |
+| big cores | 307 MHz – 1.25 GHz | 1.32 – 2.15 GHz |
+
+The lower downstream voltages (670/745 mV) aren't used: below 850 mV the CPU
+memories must be moved to the MX rail (APM) and below 700 mV their timing
+settings (MEM-ACC) must change, and mainline drives neither. So idle draws a
+little more than Android, but nothing runs below a safe voltage. The CBF
+(cluster interconnect) clock each OPP asks for stays inside the same corner.
+
+The cpufreq drivers are modules (`qcom-cpufreq-nvmem`, `cpufreq-dt`) that
+`gemini-cpufreq.service` loads after boot, then sets the `CPU_SPEED` limit and
+the `schedutil` governor:
+
+- `full`: every clock the chip's speed bin allows.
+- `safe`: up to 1.23 / 1.25 GHz, all at 905 mV.
+- `off`: drivers not loaded, the CPUs keep the bootloader's 1.04 GHz.
+
+Guard: the level is saved as "being tested" before scaling starts, and
+cleared after 10 minutes or at a clean shutdown. If a boot finds it still
+set, the phone hung or restarted, and that boot uses one level lower until
+you choose again with `cpu full|safe|off`. Thermal throttling uses the
+cooling maps of `msm8996.dtsi`.
+
+Check: `cpu`, `cat /sys/devices/system/cpu/cpufreq/policy*/stats/time_in_state`,
+`cat /sys/kernel/debug/regulator/regulator_summary` (as root: VDD_APCC follows
+the clock).
+
+## Sleep
+
+MSM8996 has no deep sleep (suspend to RAM) in mainline, and the PSCI cluster
+idle states aren't described. What works is **suspend to idle** (s2idle):
+programs are frozen, drivers suspended, and the CPUs wait in WFI until an
+interrupt. It saves less than Android's sleep, but much more than staying
+awake with WiFi and background programs running.
+
+- `phone-sleep`: sleep now. `phone-sleep auto 10`: sleep after 10 minutes
+  with the screen off, but not on a charger, not during an ssh login, and
+  not while one of `SLEEP_BLOCKERS` runs (Claude Code, pi, apt...). Off by
+  default: asleep, the phone is off the network.
+- Wakes on: power key (then the screen comes on), volume up, Home, plugging in
+  a charger, an RTC alarm (`sudo rtcwake -m freeze -s 600` sleeps 10 minutes).
+- `/etc/systemd/sleep.conf.d/gemini.conf`: suspend = `freeze`; hibernation
+  is off (no swap partition, and nothing to resume from).
+- Guard: `gemini-sleep` writes `/var/lib/gemini/sleep-pending` before
+  sleeping and removes it on waking. If a boot finds it, the last sleep never
+  woke up, and automatic sleep is switched off. If a driver refuses to
+  suspend, the phone simply stays awake, and automatic sleep waits 30 minutes
+  before trying again (`journalctl -b | grep gemini-sleep`).
+
 ## Not supported
 
-- **Suspend**: MSM8996 deep sleep isn't supported upstream. The phone stays
-  awake (good for a server); the screen turns off. Sleep targets are masked.
+- **Deep sleep** (suspend to RAM, the whole SoC powered down): no mainline
+  support for MSM8996. Use the s2idle sleep above, or keep it on a charger.
 - **Cameras**, **fingerprint reader**, ambient light sensor (the DSP only
   reports proximity on this channel).
 - Expect roughly 6–10 hours of battery with the screen off and WiFi on;
