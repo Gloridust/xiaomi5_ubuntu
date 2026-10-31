@@ -14,10 +14,10 @@ Q="${WORK_DIR}/qemu"
 rel=$(cat "${OUT_DIR}/kernel.release")
 rm -rf "$Q"; mkdir -p "$Q"
 
-# QEMU's disk is USB storage, so the test initramfs also needs usb-storage.
-log "Building test initramfs (+usb-storage)"
+# QEMU's disk is virtio, so the test initramfs also needs virtio_blk.
+log "Building test initramfs (+virtio_blk)"
 cp -a "${ROOTFS_DIR}/etc/initramfs-tools" "$Q/itools-backup"
-printf 'usb-storage\nuas\n' >> "${ROOTFS_DIR}/etc/initramfs-tools/modules"
+printf 'virtio_blk\n' >> "${ROOTFS_DIR}/etc/initramfs-tools/modules"
 for m in proc sys dev; do mount --bind "/$m" "${ROOTFS_DIR}/$m"; done
 restore() {
 	for m in dev sys proc; do umount "${ROOTFS_DIR}/$m" 2>/dev/null || true; done

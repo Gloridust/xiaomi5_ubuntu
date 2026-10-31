@@ -9,8 +9,8 @@ PW = "Gemini-Test-42"
 cmd = ["qemu-system-aarch64", "-M", "virt", "-cpu", "cortex-a57", "-smp", "4", "-m", "2048",
        "-kernel", kernel, "-initrd", initrd,
        "-append", "root=LABEL=gemini-root rootwait ro console=ttyAMA0 loglevel=4",
-       "-device", "qemu-xhci", "-drive", "if=none,id=d,format=raw,file=" + disk,
-       "-device", "usb-storage,drive=d", "-netdev", "user,id=n",
+       "-drive", "if=none,id=d,format=raw,file=" + disk,
+       "-device", "virtio-blk-pci,drive=d", "-netdev", "user,id=n",
        "-device", "virtio-net-pci,netdev=n", "-nographic", "-no-reboot"]
 pid, fd = pty.fork()
 if pid == 0:
